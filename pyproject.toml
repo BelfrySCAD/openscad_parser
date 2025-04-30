@@ -1,0 +1,48 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openscad_parser"
+version = "0.9.0"
+authors = [
+  { name="Revar Desmera", email="revarbat@gmail.com" },
+]
+maintainers = [
+  { name="Revar Desmera", email="revarbat@gmail.com" },
+]
+description = "A PEG parser to read OpenSCAD language source code."
+readme = "README.rst"
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["openscad", "openscad parser", "parser"]
+dependencies = [
+    "arpeggio>=2.0.2",
+]
+
+
+[project.urls]
+"Homepage" = "https://github.com/belfryscad/openscad_parser"
+"Repository" = "https://github.com/belfryscad/openscad_parser"
+"Bug Tracker" = "https://github.com/belfryscad/openscad_parser/issues"
+"Releases" = "https://github.com/belfryscad/openscad_parser/releases"
+"Usage" = "https://github.com/belfryscad/openscad_parser/README.rst"
+"Documentation" = "https://github.com/belfryscad/openscad_parser/WRITING_DOCS.md"
