@@ -64,40 +64,40 @@ def TOK_ASSIGN():
     return ( '=', Not('=') )
 
 def TOK_USE():
-    return Kwd("use")
+    return _(r'use\>')
 
 def TOK_INCLUDE():
-    return Kwd("include")
+    return _(r'include\>')
 
 def TOK_MODULE():
-    return Kwd("module")
+    return _(r'module\>')
 
 def TOK_FUNCTION():
-    return Kwd("function")
+    return _(r'function\>')
 
 def TOK_IF():
-    return Kwd("if")
+    return _(r'if\>')
 
 def TOK_ELSE():
-    return Kwd("else")
+    return _(r'else\>')
 
 def TOK_FOR():
-    return Kwd("for")
+    return _(r'for\>')
 
 def TOK_INTERSECTION_FOR():
-    return Kwd("intersection_for")
+    return _(r'intersection_for\>')
 
 def TOK_LET():
-    return Kwd("let")
+    return _(r'let\>')
 
 def TOK_ASSERT():
-    return Kwd("assert")
+    return _(r'assert\>')
 
 def TOK_ECHO():
-    return Kwd("echo")
+    return _(r'echo\>')
 
 def TOK_EACH():
-    return Kwd("each")
+    return _(r'each\>')
 
 def TOK_TRUE():
     return _(r'true\>')
