@@ -63,7 +63,6 @@ def TOK_NOTEQUAL():
 def TOK_ASSIGN():
     return ( '=', Not('=') )
 
-
 def TOK_USE():
     return Kwd("use")
 
@@ -128,14 +127,23 @@ def statement():
             assignment_stmt
         ]
 
-def assignment_stmt():
-    return (TOK_ID, TOK_ASSIGN, expr, ';')
-
 def module_def():
     return (TOK_MODULE, TOK_ID, '(', parameters, ')', statement)
 
 def function_def():
     return (TOK_FUNCTION, TOK_ID, '(', parameters, ')', TOK_ASSIGN, expr, ';')
+
+def assignment_stmt():
+    return (TOK_ID, TOK_ASSIGN, expr, ';')
+
+def module_instance():
+    return [
+            modifier_show_only,
+            modifier_highlight,
+            modifier_background,
+            modifier_disable,
+            single_module_instance
+        ]
 
 def modifier_show_only():
     return ( '!', module_instance )
@@ -149,15 +157,6 @@ def modifier_background():
 def modifier_disable():
     return ( '*', module_instance )
 
-def module_instance():
-    return [
-            modifier_show_only,
-            modifier_highlight,
-            modifier_background,
-            modifier_disable,
-            single_module_instance
-        ]
-
 def single_module_instance():
     return [
             modular_for,
@@ -169,19 +168,16 @@ def single_module_instance():
             modular_call
         ]
 
-def assignment_expr():
-    return (TOK_ID, TOK_ASSIGN, expr)
-
-def assignments_expr():
-    return ZeroOrMore(assignment_expr, sep=TOK_COMMA)
-
 def child_stmt():
     return [
             ';',
-            ( '{', ZeroOrMore([ assignment_stmt, child_stmt ]), '}' ),
+            child_block,
             module_instance
         ]
 
+def child_block():
+    return ( '{', ZeroOrMore([ assignment_stmt, child_block ]), '}' )
+    
 
 # --- Modules and Module Control Structures ---
 
@@ -210,13 +206,13 @@ def modular_call():
 # --- Parameter and argument lists ---
 
 def parameters():
-    return ( ZeroOrMore(parameter, sep=TOK_COMMA), Optional(TOK_COMMA) )
+    return ( ZeroOrMore(parameter, sep=TOK_COMMA), ZeroOrMore(TOK_COMMA) )
 
 def parameter():
     return ( TOK_ID, Optional(TOK_ASSIGN, expr) )
 
 def arguments():
-    return ( ZeroOrMore(argument, sep=TOK_COMMA), Optional(TOK_COMMA) )
+    return ( ZeroOrMore(argument, sep=TOK_COMMA), ZeroOrMore(TOK_COMMA) )
 
 def argument():
     return ( Optional(TOK_ID, TOK_ASSIGN), expr )
@@ -224,20 +220,11 @@ def argument():
 
 # --- Expressions ---
 
-def funclit_def():
-    return ( TOK_FUNCTION, '(', parameters, ')', expr )
+def assignments_expr():
+    return ZeroOrMore(assignment_expr, sep=TOK_COMMA)
 
-def ternary_expr():
-    return ( prec_logical_or, '?', expr, ':', expr )
-
-def let_expr():
-    return ( TOK_LET, '(', arguments, ')', expr )
-
-def assert_expr():
-    return ( TOK_ASSERT, '(', arguments, ')', Optional(expr) )
-
-def echo_expr():
-    return ( TOK_ECHO, '(', arguments, ')', Optional(expr) )
+def assignment_expr():
+    return (TOK_ID, TOK_ASSIGN, expr)
 
 def expr():
     return [
@@ -249,35 +236,47 @@ def expr():
             prec_logical_or
         ]
 
+def let_expr():
+    return ( TOK_LET, '(', arguments, ')', expr )
+
+def assert_expr():
+    return ( TOK_ASSERT, '(', arguments, ')', Optional(expr) )
+
+def echo_expr():
+    return ( TOK_ECHO, '(', arguments, ')', Optional(expr) )
+
+def funclit_def():
+    return ( TOK_FUNCTION, '(', parameters, ')', expr )
+
+def ternary_expr():
+    return ( prec_logical_or, '?', expr, ':', expr )
+
 def prec_logical_or():
-    return ( prec_logical_and, ZeroOrMore(TOK_LOGICAL_OR, prec_logical_and) )
+    return OneOrMore(prec_logical_and, sep=TOK_LOGICAL_OR)
 
 def prec_logical_and():
-    return ( prec_equality, ZeroOrMore(TOK_LOGICAL_AND, prec_equality) )
+    return OneOrMore(prec_equality, sep=TOK_LOGICAL_AND)
 
 def prec_equality():
-    return ( prec_relational, ZeroOrMore([TOK_EQUAL, TOK_NOTEQUAL], prec_relational) )
+    return OneOrMore(prec_relational, sep=[TOK_EQUAL, TOK_NOTEQUAL])
 
 def prec_relational():
-    return ( prec_sum, ZeroOrMore(['<=', '>=', '<', '>'], prec_sum) )
+    return OneOrMore(prec_sum, sep=['<=', '>=', '<', '>'])
 
 def prec_sum():
-    return ( prec_product, ZeroOrMore(['+', '-'], prec_product) )
+    return OneOrMore(prec_product, sep=['+', '-'])
 
 def prec_product():
-    return ( prec_unary, ZeroOrMore(['*', '/', '%'], prec_unary) )
+    return OneOrMore(prec_unary, sep=['*', '/', '%'])
 
 def prec_unary():
-    return [
-            ( '+', prec_unary ),
-            ( '-', prec_unary ),
-            ( '!', prec_unary ),
-            prec_power
-        ]
+    return ( ZeroOrMore(['+', '-', '!']), prec_power )
 
 def prec_power():
     return ( prec_call, Optional('^', prec_unary) )
 
+def prec_call():
+    return ( primary, ZeroOrMore([call_expr, lookup_expr, member_expr]) )
 
 def call_expr():
     return ( '(', arguments, ')' )
@@ -288,14 +287,18 @@ def lookup_expr():
 def member_expr():
     return ( '.', TOK_ID )
 
-def prec_call():
-    return ( primary, ZeroOrMore([call_expr, lookup_expr, member_expr]) )
-
-def variable_access():
-    return TOK_ID
-
-def superfluous_parens():
-    return ( '(', expr, ')' )
+def primary():
+    return [
+            ( '(', expr, ')' ),
+            range_literal,
+            vector_decl,
+            undef_literal,
+            true_literal,
+            false_literal,
+            string_literal,
+            number_literal,
+            variable_access
+        ]
 
 def range_literal():
     return ( '[', expr, ':', Optional(expr, ':'), expr, ']' )
@@ -303,21 +306,46 @@ def range_literal():
 def vector_decl():
     return ( '[', vector_elements, Optional(TOK_COMMA), ']' )
 
-def primary():
+def undef_literal():
+    return TOK_UNDEF
+
+def true_literal():
+    return TOK_TRUE
+
+def false_literal():
+    return TOK_FALSE
+
+def string_literal():
+    return TOK_STRING
+
+def number_literal():
+    return TOK_NUMBER
+
+def variable_access():
+    return TOK_ID
+
+
+# --- Vector and list comprehension ---
+
+def vector_elements():
+    return ZeroOrMore(vector_element, sep=TOK_COMMA)
+
+def vector_element():
+    return [ listcomp_elements_p, expr ]
+
+def listcomp_elements_p():
     return [
-            ( '(', expr, ')' ),
-            range_literal,
-            vector_decl,
-            TOK_UNDEF,
-            TOK_TRUE,
-            TOK_FALSE,
-            TOK_NUMBER,
-            TOK_STRING,
-            variable_access
+            listcomp_elements,
+            ( '(', listcomp_elements_p, ')' )
         ]
 
-
-# --- Vector and list comprehension elements ---
+def listcomp_elements():
+    return [
+            listcomp_let,
+            listcomp_each,
+            listcomp_for,
+            listcomp_ifelse,
+        ]
 
 def listcomp_let():
     return ( TOK_LET, '(', arguments, ')', listcomp_elements_p )
@@ -331,24 +359,5 @@ def listcomp_for():
 def listcomp_ifelse():
     return ( TOK_IF, '(', expr, ')', vector_element, Optional(TOK_ELSE, vector_element) )
 
-def listcomp_elements():
-    return [
-            listcomp_let,
-            listcomp_each,
-            listcomp_for,
-            listcomp_ifelse,
-        ]
-
-def listcomp_elements_p():
-    return [
-            listcomp_elements,
-            ( '(', listcomp_elements_p, ')' )
-        ]
-
-def vector_elements():
-    return ZeroOrMore(vector_element, sep=TOK_COMMA)
-
-def vector_element():
-    return [ listcomp_elements_p, expr ]
 
 
