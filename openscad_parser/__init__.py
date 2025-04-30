@@ -13,12 +13,12 @@ from arpeggio import (
 # --- The parser ---
 
 def getOpenSCADParser():
-    return ParserPython(openscad_root, comment, reduce_tree=False, memoization=True, debug=False)
+    return ParserPython(openscad_language, comment, reduce_tree=False, memoization=True, debug=False)
 
 
-# --- The root of all parsing evil ---
+# --- OpenSCAD language parsing root ---
 
-def openscad_root():
+def openscad_language():
     return ( ZeroOrMore([ use_stmt, include_stmt, statement ]), EOF )
 
 
