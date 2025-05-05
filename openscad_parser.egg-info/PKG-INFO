@@ -1,0 +1,32 @@
+Metadata-Version: 2.4
+Name: openscad_parser
+Version: 0.9.0
+Summary: A PEG parser to read OpenSCAD language source code.
+Author-email: Revar Desmera <revarbat@gmail.com>
+Maintainer-email: Revar Desmera <revarbat@gmail.com>
+Project-URL: Homepage, https://github.com/belfryscad/openscad_parser
+Project-URL: Repository, https://github.com/belfryscad/openscad_parser
+Project-URL: Bug Tracker, https://github.com/belfryscad/openscad_parser/issues
+Project-URL: Releases, https://github.com/belfryscad/openscad_parser/releases
+Project-URL: Usage, https://github.com/belfryscad/openscad_parser/README.rst
+Project-URL: Documentation, https://github.com/belfryscad/openscad_parser/WRITING_DOCS.md
+Keywords: openscad,openscad parser,parser
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Manufacturing
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Artistic Software
+Classifier: Topic :: Multimedia :: Graphics :: 3D Modeling
+Classifier: Topic :: Multimedia :: Graphics :: 3D Rendering
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: arpeggio>=2.0.2
+Dynamic: license-file

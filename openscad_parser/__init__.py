@@ -12,8 +12,8 @@ from arpeggio import (
 
 # --- The parser ---
 
-def getOpenSCADParser():
-    return ParserPython(openscad_language, comment, reduce_tree=False, memoization=True, debug=False)
+def getOpenSCADParser(debug=False):
+    return ParserPython(openscad_language, comment, reduce_tree=False, memoization=True, debug=debug)
 
 
 # --- OpenSCAD language parsing root ---
@@ -64,40 +64,40 @@ def TOK_ASSIGN():
     return ( '=', Not('=') )
 
 def TOK_USE():
-    return _(r'use\>')
+    return Kwd('use')
 
 def TOK_INCLUDE():
-    return _(r'include\>')
+    return Kwd('include')
 
 def TOK_MODULE():
-    return _(r'module\>')
+    return Kwd('module')
 
 def TOK_FUNCTION():
-    return _(r'function\>')
+    return Kwd('function')
 
 def TOK_IF():
-    return _(r'if\>')
+    return Kwd('if')
 
 def TOK_ELSE():
-    return _(r'else\>')
+    return Kwd('else')
 
 def TOK_FOR():
-    return _(r'for\>')
+    return Kwd('for')
 
 def TOK_INTERSECTION_FOR():
-    return _(r'intersection_for\>')
+    return Kwd('intersection_for')
 
 def TOK_LET():
-    return _(r'let\>')
+    return Kwd('let')
 
 def TOK_ASSERT():
-    return _(r'assert\>')
+    return Kwd('assert')
 
 def TOK_ECHO():
-    return _(r'echo\>')
+    return Kwd('echo')
 
 def TOK_EACH():
-    return _(r'each\>')
+    return Kwd('each')
 
 def TOK_TRUE():
     return _(r'true\>')
