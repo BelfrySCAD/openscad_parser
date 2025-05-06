@@ -12,8 +12,8 @@ from arpeggio import (
 
 # --- The parser ---
 
-def getOpenSCADParser(debug=False):
-    return ParserPython(openscad_language, comment, reduce_tree=False, memoization=True, debug=debug)
+def getOpenSCADParser(reduce_tree=False, debug=False):
+    return ParserPython(openscad_language, comment, reduce_tree=reduce_tree, memoization=True, debug=debug)
 
 
 # --- OpenSCAD language parsing root ---
