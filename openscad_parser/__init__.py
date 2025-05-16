@@ -22,7 +22,7 @@ def getOpenSCADParser(reduce_tree=False, debug=False):
 # --- OpenSCAD language parsing root ---
 
 def openscad_language():
-    return (ZeroOrMore([use_stmt, include_stmt, statement]), EOF)
+    return (ZeroOrMore([use_statement, include_statement, statement]), EOF)
 
 
 # --- Lexical and basic rules ---
@@ -145,11 +145,11 @@ def TOK_UNDEF():
 
 # --- Grammar rules ---
 
-def use_stmt():
+def use_statement():
     return (TOK_USE, '<', _(r'[^>]+'), '>')
 
 
-def include_stmt():
+def include_statement():
     return (TOK_INCLUDE, '<', _(r'[^>]+'), '>')
 
 
@@ -157,56 +157,64 @@ def statement():
     return [
             ";",
             ('{', ZeroOrMore(statement), '}'),
-            module_def,
-            function_def,
-            module_instance,
-            assignment_stmt
+            module_definition,
+            function_definition,
+            module_instantiation,
+            assignment
         ]
 
 
-def module_def():
+def module_definition():
     return (TOK_MODULE, TOK_ID, '(', parameters, ')', statement)
 
 
-def function_def():
+def function_definition():
     return (TOK_FUNCTION, TOK_ID, '(', parameters, ')', TOK_ASSIGN, expr, ';')
 
 
-def assignment_stmt():
+def assignment():
     return (TOK_ID, TOK_ASSIGN, expr, ';')
 
 
-def module_instance():
+def module_instantiation():
     return [
             modifier_show_only,
             modifier_highlight,
             modifier_background,
             modifier_disable,
-            single_module_instance
+            ifelse_statement,
+            single_module_instantiation
         ]
 
 
 def modifier_show_only():
-    return ('!', module_instance)
+    return ('!', module_instantiation)
 
 
 def modifier_highlight():
-    return ('#', module_instance)
+    return ('#', module_instantiation)
 
 
 def modifier_background():
-    return ('%', module_instance)
+    return ('%', module_instantiation)
 
 
 def modifier_disable():
-    return ('*', module_instance)
+    return ('*', module_instantiation)
 
 
-def single_module_instance():
+def ifelse_statement():
+    return [
+            (TOK_IF, '(', expr, ')', child_statement,
+                TOK_ELSE, child_statement),
+            (TOK_IF, '(', expr, ')', child_statement)
+        ]
+
+
+def single_module_instantiation():
     return [
             modular_for,
             modular_intersection_for,
-            modular_ifelse,
             modular_let,
             modular_assert,
             modular_echo,
@@ -214,55 +222,42 @@ def single_module_instance():
         ]
 
 
-def child_stmt():
+def child_statement():
     return [
             ';',
-            child_block,
-            module_instance
+            ('{', ZeroOrMore([assignment, child_statement]), '}'),
+            module_instantiation
         ]
-
-
-def child_block():
-    return ('{', ZeroOrMore([assignment_stmt, child_block]), '}')
 
 
 # --- Modules and Module Control Structures ---
 
 def modular_for():
-    return (
-        TOK_FOR, "(",
-        assignments_expr,
-        Optional(
-            ";", expr,
-            ";", assignments_expr
-            ),
-        ")",
-        child_stmt
-        )
+    return [
+            (TOK_FOR, "(", assignments_expr, ")", child_statement),
+            (TOK_FOR, "(", assignments_expr, ";", expr, ";", assignments_expr,
+                ")", child_statement)
+        ]
 
 
 def modular_intersection_for():
-    return (TOK_INTERSECTION_FOR, "(", assignments_expr, ")", child_stmt)
-
-
-def modular_ifelse():
-    return (TOK_IF, '(', expr, ')', child_stmt, Optional(TOK_ELSE, child_stmt))
+    return (TOK_INTERSECTION_FOR, "(", assignments_expr, ")", child_statement)
 
 
 def modular_let():
-    return (TOK_LET, "(", assignments_expr, ")", child_stmt)
+    return (TOK_LET, "(", arguments, ")", child_statement)
 
 
 def modular_assert():
-    return (TOK_ASSERT, "(", arguments, ")", child_stmt)
+    return (TOK_ASSERT, "(", arguments, ")", child_statement)
 
 
 def modular_echo():
-    return (TOK_ECHO, "(", arguments, ")", child_stmt)
+    return (TOK_ECHO, "(", arguments, ")", child_statement)
 
 
 def modular_call():
-    return (TOK_ID, "(", arguments, ")", child_stmt)
+    return (TOK_ID, "(", arguments, ")", child_statement)
 
 
 # --- Parameter and argument lists ---
@@ -272,15 +267,21 @@ def parameters():
 
 
 def parameter():
-    return (TOK_ID, Optional(TOK_ASSIGN, expr))
+    return [
+            (TOK_ID, TOK_ASSIGN, expr),
+            TOK_ID
+        ]
 
 
 def arguments():
-    return (ZeroOrMore(argument, sep=TOK_COMMA), ZeroOrMore(TOK_COMMA))
+    return (ZeroOrMore(argument, sep=TOK_COMMA), Optional(TOK_COMMA))
 
 
 def argument():
-    return (Optional(TOK_ID, TOK_ASSIGN), expr)
+    return [
+            (TOK_ID, TOK_ASSIGN, expr),
+            expr
+        ]
 
 
 # --- Expressions ---
@@ -305,7 +306,7 @@ def expr():
 
 
 def let_expr():
-    return (TOK_LET, '(', arguments, ')', expr)
+    return (TOK_LET, '(', assignments_expr, ')', expr)
 
 
 def assert_expr():
@@ -333,27 +334,30 @@ def prec_logical_and():
 
 
 def prec_equality():
-    return OneOrMore(prec_relational, sep=[TOK_EQUAL, TOK_NOTEQUAL])
+    return OneOrMore(prec_comparison, sep=[TOK_EQUAL, TOK_NOTEQUAL])
 
 
-def prec_relational():
-    return OneOrMore(prec_sum, sep=['<=', '>=', '<', '>'])
+def prec_comparison():
+    return OneOrMore(prec_addition, sep=['<=', '>=', '<', '>'])
 
 
-def prec_sum():
-    return OneOrMore(prec_product, sep=['+', '-'])
+def prec_addition():
+    return OneOrMore(prec_multiplication, sep=['+', '-'])
 
 
-def prec_product():
+def prec_multiplication():
     return OneOrMore(prec_unary, sep=['*', '/', '%'])
 
 
 def prec_unary():
-    return (ZeroOrMore(['+', '-', '!']), prec_power)
+    return (ZeroOrMore(['+', '-', '!']), prec_exponent)
 
 
-def prec_power():
-    return (prec_call, Optional('^', prec_unary))
+def prec_exponent():
+    return [
+        (prec_call, '^', prec_unary),
+        prec_call
+    ]
 
 
 def prec_call():
@@ -375,47 +379,15 @@ def member_expr():
 def primary():
     return [
             ('(', expr, ')'),
-            range_literal,
-            vector_decl,
-            undef_literal,
-            true_literal,
-            false_literal,
-            string_literal,
-            number_literal,
-            variable_access
+            ('[', expr, ':', expr, Optional(':', expr), ']'),
+            ('[', vector_elements, Optional(TOK_COMMA), ']'),
+            TOK_UNDEF,
+            TOK_TRUE,
+            TOK_FALSE,
+            TOK_STRING,
+            TOK_NUMBER,
+            TOK_ID
         ]
-
-
-def range_literal():
-    return ('[', expr, ':', Optional(expr, ':'), expr, ']')
-
-
-def vector_decl():
-    return ('[', vector_elements, Optional(TOK_COMMA), ']')
-
-
-def undef_literal():
-    return TOK_UNDEF
-
-
-def true_literal():
-    return TOK_TRUE
-
-
-def false_literal():
-    return TOK_FALSE
-
-
-def string_literal():
-    return TOK_STRING
-
-
-def number_literal():
-    return TOK_NUMBER
-
-
-def variable_access():
-    return TOK_ID
 
 
 # --- Vector and list comprehension ---
@@ -425,18 +397,12 @@ def vector_elements():
 
 
 def vector_element():
-    return [listcomp_elements_p, expr]
-
-
-def listcomp_elements_p():
-    return [
-            listcomp_elements,
-            ('(', listcomp_elements_p, ')')
-        ]
+    return [listcomp_elements, expr]
 
 
 def listcomp_elements():
     return [
+            ('(', listcomp_elements, ')'),
             listcomp_let,
             listcomp_each,
             listcomp_for,
@@ -445,7 +411,7 @@ def listcomp_elements():
 
 
 def listcomp_let():
-    return (TOK_LET, '(', arguments, ')', listcomp_elements_p)
+    return (TOK_LET, '(', assignments_expr, ')', listcomp_elements)
 
 
 def listcomp_each():
@@ -453,24 +419,18 @@ def listcomp_each():
 
 
 def listcomp_for():
-    return (
-        TOK_FOR, '(',
-        assignments_expr,
-        Optional(
-            ';', expr,
-            ';', assignments_expr
-            ),
-        ')',
-        vector_element
-        )
+    return [
+            (TOK_FOR, '(', assignments_expr, ';', expr, ';',
+                assignments_expr, ')', vector_element),
+            (TOK_FOR, '(', assignments_expr, ')', vector_element),
+        ]
 
 
 def listcomp_ifelse():
-    return (
-        TOK_IF, '(', expr, ')',
-        vector_element,
-        Optional(TOK_ELSE, vector_element)
-        )
+    return [
+            (TOK_IF, '(', expr, ')', vector_element, TOK_ELSE, vector_element)
+            (TOK_IF, '(', expr, ')', vector_element)
+        ]
 
 
 # vim: set ts=4 sw=4 expandtab:
