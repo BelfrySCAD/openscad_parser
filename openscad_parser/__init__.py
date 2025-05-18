@@ -50,8 +50,7 @@ def TOK_NUMBER():
     return _(
         r'[+-]?(0x[0-9A-Fa-f]+|'
         r'\d+([.]\d*)?([eE][+-]?\d+)?'
-        r'|[.]\d+([eE][+-]?\d+)?)',
-        str_repr='number'
+        r'|[.]\d+([eE][+-]?\d+)?)'
         )
 
 
@@ -428,7 +427,7 @@ def listcomp_for():
 
 def listcomp_ifelse():
     return [
-            (TOK_IF, '(', expr, ')', vector_element, TOK_ELSE, vector_element)
+            (TOK_IF, '(', expr, ')', vector_element, TOK_ELSE, vector_element),
             (TOK_IF, '(', expr, ')', vector_element)
         ]
 
