@@ -136,3 +136,6 @@ cython_debug/
 # Local ignores
 venv/
 *.dot
+.DS_Store
+*.egg
+*.egg-info
