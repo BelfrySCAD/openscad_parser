@@ -134,7 +134,7 @@ dmypy.json
 cython_debug/
 
 # Local ignores
-venv/
+.venv/
 *.dot
 .DS_Store
 *.egg
