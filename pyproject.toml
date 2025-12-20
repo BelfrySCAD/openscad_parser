@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openscad_parser"
-version = "0.9.0"
+version = "0.9.1"
 authors = [
   { name="Revar Desmera", email="revarbat@gmail.com" },
 ]
@@ -35,9 +35,13 @@ classifiers = [
 ]
 keywords = ["openscad", "openscad parser", "parser"]
 dependencies = [
-    "arpeggio>=2.0.2",
+    "arpeggio>=2.0.3",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/belfryscad/openscad_parser"

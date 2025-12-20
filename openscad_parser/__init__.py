@@ -40,10 +40,7 @@ def comment():
 
 
 def TOK_STRING():
-    return [
-            ("'", _(r"([^'\\]|\\.|\\$)*", str_repr='string'), "'"),
-            ('"', _(r'([^"\\]|\\.|\\$)*', str_repr='string'), '"')
-        ]
+    return ('"', _(r'([^"\\]|\\.|\\$)*', str_repr='string'), '"')
 
 
 def TOK_NUMBER():
@@ -55,7 +52,10 @@ def TOK_NUMBER():
 
 
 def TOK_ID():
-    return [_(r"([$]?[A-Za-z0-9_]+)", str_repr='string')]
+    # Exclude exact matches of true/false/undef in any case (using word boundaries),
+    # but allow identifiers that start with these words (e.g., "truevar" is valid)
+    # The pattern ensures the identifier is not exactly one of the keywords
+    return [_(r"(?i)([$]?(?!\b(?:true|false|undef)\b)[A-Za-z][A-Za-z0-9_]*)", str_repr='string')]
 
 
 def TOK_COMMA():
@@ -68,6 +68,46 @@ def TOK_LOGICAL_OR():
 
 def TOK_LOGICAL_AND():
     return "&&"
+
+
+def TOK_LOGICAL_NOT():
+    return "!"
+
+
+def TOK_BINARY_OR():
+    return ("|", Not('|'))
+
+
+def TOK_BINARY_AND():
+    return ("&", Not('&'))
+
+
+def TOK_BINARY_NOT():
+    return "~"
+
+
+def TOK_BINARY_SHIFT_LEFT():
+    return "<<"
+
+
+def TOK_BINARY_SHIFT_RIGHT():
+    return ">>"
+
+
+def TOK_GT():
+    return (">", Not('>', '='))
+
+
+def TOK_LT():
+    return ("<", Not('<', '='))
+
+
+def TOK_GTE():
+    return ">="
+
+
+def TOK_LTE():
+    return "<="
 
 
 def TOK_EQUAL():
@@ -131,15 +171,18 @@ def TOK_EACH():
 
 
 def TOK_TRUE():
-    return _(r'true\>')
+    # Match "true" as a complete word (case-sensitive)
+    return _(r'\btrue\b', str_repr='string')
 
 
 def TOK_FALSE():
-    return _(r'false\>')
+    # Match "false" as a complete word (case-sensitive)
+    return _(r'\bfalse\b', str_repr='string')
 
 
 def TOK_UNDEF():
-    return _(r'undef\>')
+    # Match "undef" as a complete word (case-sensitive)
+    return _(r'\bundef\b', str_repr='string')
 
 
 # --- Grammar rules ---
@@ -337,7 +380,19 @@ def prec_equality():
 
 
 def prec_comparison():
-    return OneOrMore(prec_addition, sep=['<=', '>=', '<', '>'])
+    return OneOrMore(prec_binary_or, sep=[TOK_LTE, TOK_GTE, TOK_LT, TOK_GT])
+
+
+def prec_binary_or():
+    return OneOrMore(prec_binary_and, sep=TOK_BINARY_OR)
+
+
+def prec_binary_and():
+    return OneOrMore(prec_binary_shift, sep=TOK_BINARY_AND)
+
+
+def prec_binary_shift():
+    return OneOrMore(prec_addition, sep=[TOK_BINARY_SHIFT_LEFT, TOK_BINARY_SHIFT_RIGHT])
 
 
 def prec_addition():
@@ -349,7 +404,7 @@ def prec_multiplication():
 
 
 def prec_unary():
-    return (ZeroOrMore(['+', '-', '!']), prec_exponent)
+    return (ZeroOrMore(['+', '-', TOK_LOGICAL_NOT, TOK_BINARY_NOT]), prec_exponent)
 
 
 def prec_exponent():
