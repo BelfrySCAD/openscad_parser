@@ -1,9 +1,0 @@
-LICENSE
-README.rst
-pyproject.toml
-openscad_parser/__init__.py
-openscad_parser.egg-info/PKG-INFO
-openscad_parser.egg-info/SOURCES.txt
-openscad_parser.egg-info/dependency_links.txt
-openscad_parser.egg-info/requires.txt
-openscad_parser.egg-info/top_level.txt
