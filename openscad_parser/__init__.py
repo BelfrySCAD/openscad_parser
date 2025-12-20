@@ -15,7 +15,7 @@ from arpeggio import (
 def getOpenSCADParser(reduce_tree=False, debug=False):
     return ParserPython(
         openscad_language, comment, reduce_tree=reduce_tree,
-        memoization=True, debug=debug
+        memoization=True, autokwd=True, debug=debug
         )
 
 
@@ -52,10 +52,7 @@ def TOK_NUMBER():
 
 
 def TOK_ID():
-    # Exclude exact matches of true/false/undef in any case (using word boundaries),
-    # but allow identifiers that start with these words (e.g., "truevar" is valid)
-    # The pattern ensures the identifier is not exactly one of the keywords
-    return [_(r"(?i)([$]?(?!\b(?:true|false|undef)\b)[A-Za-z][A-Za-z0-9_]*)", str_repr='string')]
+    return _(r"(\$?[A-Za-z][A-Za-z0-9_]*)", str_repr='string')
 
 
 def TOK_COMMA():
@@ -171,18 +168,15 @@ def TOK_EACH():
 
 
 def TOK_TRUE():
-    # Match "true" as a complete word (case-sensitive)
-    return _(r'\btrue\b', str_repr='string')
+    return Kwd('true')
 
 
 def TOK_FALSE():
-    # Match "false" as a complete word (case-sensitive)
-    return _(r'\bfalse\b', str_repr='string')
+    return Kwd('false')
 
 
 def TOK_UNDEF():
-    # Match "undef" as a complete word (case-sensitive)
-    return _(r'\bundef\b', str_repr='string')
+    return Kwd('undef')
 
 
 # --- Grammar rules ---

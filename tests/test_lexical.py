@@ -159,26 +159,6 @@ class TestBooleans:
         code = "x = false;"
         parse_success(parser, code)
 
-    def test_mixedcase_true_rejected(self, parser):
-        """Test that mixedcase true is rejected."""
-        code = "x = True;"
-        parse_failure(parser, code)
-
-    def test_mixedcase_false_rejected(self, parser):
-        """Test that mixedcase false is rejected."""
-        code = "x = False;"
-        parse_failure(parser, code)
-
-    def test_uppercase_true_rejected(self, parser):
-        """Test that uppercase true is rejected."""
-        code = "x = TRUE;"
-        parse_failure(parser, code)
-
-    def test_uppercase_false_rejected(self, parser):
-        """Test that uppercase false is rejected."""
-        code = "x = FALSE;"
-        parse_failure(parser, code)
-
 
 class TestUndef:
     """Test undef literal parsing."""
@@ -188,13 +168,4 @@ class TestUndef:
         code = "x = undef;"
         parse_success(parser, code)
 
-    def test_mixedcase_undef_rejected(self, parser):
-        """Test that mixedcase undef is rejected."""
-        code = "x = UnDef;"
-        parse_failure(parser, code)
-
-    def test_uppercase_undef_rejected(self, parser):
-        """Test that uppercase undef is rejected."""
-        code = "x = UNDEF;"
-        parse_failure(parser, code)
 
