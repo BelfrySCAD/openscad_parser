@@ -145,6 +145,36 @@ class TestIdentifiers:
         code = "myVariable = 1;"
         parse_success(parser, code)
 
+    def test_identifier_leading_underscore(self, parser):
+        """Test identifiers starting with underscore."""
+        code = "_private_var = 1;"
+        parse_success(parser, code)
+
+    def test_identifier_leading_underscore_uppercase(self, parser):
+        """Test uppercase identifiers starting with underscore."""
+        code = "_UNDEF = 1;"
+        parse_success(parser, code)
+
+    def test_identifier_double_underscore(self, parser):
+        """Test identifiers starting with double underscore."""
+        code = "__internal = 1;"
+        parse_success(parser, code)
+
+    def test_identifier_underscore_with_dollar(self, parser):
+        """Test identifiers with dollar sign and underscore."""
+        code = "$_special = 1;"
+        parse_success(parser, code)
+
+    def test_identifier_underscore_in_function(self, parser):
+        """Test underscore-prefixed function names."""
+        code = "function _helper(x) = x + 1;"
+        parse_success(parser, code)
+
+    def test_identifier_underscore_in_module(self, parser):
+        """Test underscore-prefixed module names."""
+        code = "module _internal() { cube(1); }"
+        parse_success(parser, code)
+
 
 class TestBooleans:
     """Test boolean literal parsing."""
