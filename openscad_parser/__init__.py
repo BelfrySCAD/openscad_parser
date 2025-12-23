@@ -52,7 +52,7 @@ def TOK_NUMBER():
 
 
 def TOK_ID():
-    return _(r"(\$?[A-Za-z_][A-Za-z0-9_]*)", str_repr='string')
+    return _(r"(\$?[_A-Za-z][A-Za-z0-9_]*)", str_repr='string')
 
 
 def TOK_COMMA():
@@ -281,7 +281,7 @@ def modular_intersection_for():
 
 
 def modular_let():
-    return (TOK_LET, "(", arguments, ")", child_statement)
+    return (TOK_LET, "(", assignments_expr, ")", child_statement)
 
 
 def modular_assert():
@@ -323,7 +323,7 @@ def argument():
 # --- Expressions ---
 
 def assignments_expr():
-    return ZeroOrMore(assignment_expr, sep=TOK_COMMA)
+    return (ZeroOrMore(assignment_expr, sep=TOK_COMMA), Optional(TOK_COMMA))
 
 
 def assignment_expr():
