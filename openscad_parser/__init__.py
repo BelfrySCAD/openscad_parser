@@ -52,7 +52,7 @@ def TOK_NUMBER():
 
 
 def TOK_ID():
-    return _(r"(\$?[A-Za-z][A-Za-z0-9_]*)", str_repr='string')
+    return _(r"(\$?[A-Za-z_][A-Za-z0-9_]*)", str_repr='string')
 
 
 def TOK_COMMA():
