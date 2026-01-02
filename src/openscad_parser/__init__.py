@@ -427,8 +427,8 @@ def member_expr():
 def primary():
     return [
             ('(', expr, ')'),
-            ('[', expr, ':', expr, Optional(':', expr), ']'),
-            ('[', vector_elements, Optional(TOK_COMMA), ']'),
+            range_expr,
+            vector_expr,
             TOK_UNDEF,
             TOK_TRUE,
             TOK_FALSE,
@@ -436,6 +436,13 @@ def primary():
             TOK_NUMBER,
             TOK_ID
         ]
+
+def range_expr():
+    return ('[', expr, ':', expr, Optional(':', expr), ']')
+
+
+def vector_expr():
+    return ('[', vector_elements, Optional(TOK_COMMA), ']')
 
 
 # --- Vector and list comprehension ---
