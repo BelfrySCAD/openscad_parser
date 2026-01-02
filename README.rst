@@ -16,6 +16,8 @@ Features
 - Parse tree generation using Arpeggio PEG parser
 - AST generation with comprehensive node types
 - Source position tracking for all AST nodes
+- AST tree can contain comment nodes (single-line and multi-line)
+- AST tree uses dataclasses and can be pickled/unpickled for caching/serialization
 
 Installation
 ------------
