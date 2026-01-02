@@ -11,7 +11,7 @@ Features
   - Expressions with proper operator precedence
   - Control structures (if/else, for loops, let, assert, echo)
   - List comprehensions
-  - Module modifiers (!, #, %, *)
+  - Module modifiers (``!``, ``#``, ``%``, ``*``)
   - Use and include statements
 - Parse tree generation using Arpeggio PEG parser
 - AST generation with comprehensive node types
@@ -76,7 +76,7 @@ AST Generation
 The parser can convert the parse tree into an Abstract Syntax Tree (AST) with typed nodes for easier programmatic manipulation.
 
 Convenience Functions
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 The easiest way to generate ASTs is using the convenience functions that handle parser creation automatically:
 
@@ -376,10 +376,10 @@ Module Instantiations
 - ``ModularEcho``: echo statements
 - ``ModularAssert``: assert statements
 - ``ModularIf``, ``ModularIfElse``: if/else statements
-- ``ModularModifierShowOnly``: ! modifier
-- ``ModularModifierHighlight``: # modifier
-- ``ModularModifierBackground``: % modifier
-- ``ModularModifierDisable``: * modifier
+- ``ModularModifierShowOnly``: ``!`` modifier
+- ``ModularModifierHighlight``: ``#`` modifier
+- ``ModularModifierBackground``: ``%`` modifier
+- ``ModularModifierDisable``: ``*`` modifier
 
 Declarations
 ~~~~~~~~~~~~
@@ -401,7 +401,7 @@ Comments
 ~~~~~~~~
 
 - ``CommentLine``: Single-line comments //
-- ``CommentSpan``: Multi-line comments /* */
+- ``CommentSpan``: Multi-line comments ``/* */``
 
 All AST node classes are fully documented with docstrings that include:
 - Description of what the node represents
@@ -465,7 +465,7 @@ Main Functions
     This function removes all cached AST trees from memory.
 
 AST Node Classes
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 All AST node classes are located in ``openscad_parser.ast``. Each node class:
 
