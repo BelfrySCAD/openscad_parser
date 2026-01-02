@@ -155,8 +155,12 @@ class TestGetASTfromFile:
             ast2 = getASTfromFile(test_file)
             
             # Should be different objects
+            assert ast1 is not None
+            assert ast2 is not None
             assert ast1 is not ast2
+            assert isinstance(ast1[0], Assignment)
             assert ast1[0].name.name == "x"
+            assert isinstance(ast2[0], Assignment)
             assert ast2[0].name.name == "y"
         finally:
             os.unlink(test_file)
@@ -293,13 +297,14 @@ class TestGetASTfromLibraryFile:
             f.write("cube(10);")
         
         try:
-            ast = getASTfromLibraryFile(current_file, "library.scad")
+            ast, path = getASTfromLibraryFile(current_file, "library.scad")
             
             assert ast is not None
             assert isinstance(ast, list)
             assert len(ast) >= 1
             assert isinstance(ast[0], ModularCall)
             assert ast[0].name.name == "cube"
+            assert path == os.path.abspath(lib_file)
         finally:
             os.unlink(current_file)
             os.unlink(lib_file)
@@ -319,13 +324,14 @@ class TestGetASTfromLibraryFile:
             f.write("function add(x, y) = x + y;")
         
         try:
-            ast = getASTfromLibraryFile(current_file, "utils/math.scad")
+            ast, path = getASTfromLibraryFile(current_file, "utils/math.scad")
             
             assert ast is not None
             assert isinstance(ast, list)
             assert len(ast) == 1
             assert isinstance(ast[0], FunctionDeclaration)
             assert ast[0].name.name == "add"
+            assert path == os.path.abspath(lib_file)
         finally:
             os.unlink(current_file)
             os.unlink(lib_file)
@@ -359,13 +365,16 @@ class TestGetASTfromLibraryFile:
         
         try:
             # First call - should parse and cache
-            ast1 = getASTfromLibraryFile(current_file, "library.scad")
+            ast1, path1 = getASTfromLibraryFile(current_file, "library.scad")
             
             # Second call - should return cached version
-            ast2 = getASTfromLibraryFile(current_file, "library.scad")
+            ast2, path2 = getASTfromLibraryFile(current_file, "library.scad")
             
             # Should be the same object (cached)
             assert ast1 is ast2
+            # Paths should be the same
+            assert path1 == path2
+            assert path1 == os.path.abspath(lib_file)
         finally:
             os.unlink(current_file)
             os.unlink(lib_file)
@@ -377,4 +386,5 @@ class TestGetASTfromLibraryFile:
         # it raises FileNotFoundError for a non-existent file
         with pytest.raises(FileNotFoundError):
             getASTfromLibraryFile("", "nonexistent_library.scad")
+
 

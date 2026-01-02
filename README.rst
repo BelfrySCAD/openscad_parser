@@ -119,10 +119,11 @@ Use ``getASTfromLibraryFile()`` to find and parse library files using OpenSCAD's
 
     # From a file that includes a library
     # Searches: current file directory, OPENSCADPATH, platform defaults
-    ast = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
+    # Returns: (AST, absolute_path) tuple
+    ast, path = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
 
     # Or without current file context
-    ast = getASTfromLibraryFile("", "MCAD/boxes.scad")
+    ast, path = getASTfromLibraryFile("", "MCAD/boxes.scad")
 
 The function searches for library files in this order:
 
@@ -294,10 +295,11 @@ Parsing Library Files
 
     # Parse a library file using OpenSCAD's search path
     # Searches: current file dir, OPENSCADPATH, platform defaults
-    ast = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
+    # Returns: (AST, absolute_path) tuple
+    ast, path = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
 
     # Or without current file context
-    ast = getASTfromLibraryFile("", "MCAD/boxes.scad")
+    ast, path = getASTfromLibraryFile("", "MCAD/boxes.scad")
 
 AST Node Types
 --------------
@@ -445,8 +447,8 @@ Main Functions
 
     :param currfile: Full path to the current OpenSCAD file (can be empty string)
     :param libfile: Partial or full path to the library file to find
-    :returns: List of AST nodes (for top-level statements)
-    :rtype: list[ASTNode] | None
+    :returns: Tuple of (AST nodes list, absolute file path). The AST list is None if empty or not valid.
+    :rtype: tuple[list[ASTNode] | None, str]
     :raises FileNotFoundError: If the library file cannot be found
     :raises Exception: If there is an error while reading or parsing the file
 
@@ -543,7 +545,7 @@ File operations will raise ``FileNotFoundError`` for missing files::
         print(f"File not found: {e}")
 
     try:
-        ast = getASTfromLibraryFile("main.scad", "missing_lib.scad")
+        ast, path = getASTfromLibraryFile("main.scad", "missing_lib.scad")
     except FileNotFoundError as e:
         print(f"Library file not found: {e}")
 

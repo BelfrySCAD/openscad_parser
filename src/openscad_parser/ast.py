@@ -2925,10 +2925,11 @@ def _find_library_file(currfile: str, libfile: str) -> Optional[str]:
     return None
 
 
-def getASTfromLibraryFile(currfile: str, libfile: str) -> list[ASTNode] | None:
+def getASTfromLibraryFile(currfile: str, libfile: str) -> tuple[list[ASTNode] | None, str]:
     """
-    Find and parse an OpenSCAD library file using OpenSCAD's search path rules.
-    
+    Find and parse an OpenSCAD library file using OpenSCAD's search path rules,
+    and return both the AST and absolute path to the file.
+
     This function searches for the library file in the following order:
     1. Directory of the current file (if currfile is provided)
     2. Directories specified in OPENSCADPATH environment variable
@@ -2936,39 +2937,39 @@ def getASTfromLibraryFile(currfile: str, libfile: str) -> list[ASTNode] | None:
        - Windows: ~/Documents/OpenSCAD/libraries
        - macOS: ~/Documents/OpenSCAD/libraries
        - Linux: ~/.local/share/OpenSCAD/libraries
-    
+
     Once found, the file is parsed using getASTfromFile(), which includes
     caching support.
-    
+
     Args:
         currfile: Full path to the current OpenSCAD file that wants to include/use
                   the library file. Can be empty string if not available.
         libfile: Partial or full path to the library file to find and parse.
                  This is typically the path specified in a 'use' or 'include' statement.
-    
+
     Returns:
-        list[ASTNode] | None: The AST representation of the library file.
-            Returns None if the file is empty or does not contain valid statements.
+        tuple[list[ASTNode] | None, str]: The AST representation of the library file
+            and the absolute path of the file parsed. The list is None if empty or not valid.
     
     Raises:
         FileNotFoundError: If the library file cannot be found in any search path.
         Exception: If there is an error while reading or parsing the file.
-    
+
     Example:
         # From a file at /path/to/main.scad that includes "utils/math.scad"
-        ast = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
+        ast, path = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
         
         # Or without current file context
-        ast = getASTfromLibraryFile("", "MCAD/boxes.scad")
+        ast, path = getASTfromLibraryFile("", "MCAD/boxes.scad")
     """
     found_file = _find_library_file(currfile, libfile)
-    
+
     if found_file is None:
         raise FileNotFoundError(
             f"Library file '{libfile}' not found in search paths. "
             f"Searched in: current file directory, OPENSCADPATH, and platform default paths."
         )
-    
-    # Use getASTfromFile() which includes caching
-    return getASTfromFile(found_file)
 
+    # Use getASTfromFile() which includes caching
+    ast = getASTfromFile(found_file)
+    return ast, os.path.abspath(found_file)
