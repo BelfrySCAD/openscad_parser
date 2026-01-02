@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "openscad_parser"
-version = "0.9.5"
+version = "1.0.0"
 description = "A PEG parser to read OpenSCAD language source code, with optional AST tree generation."
 readme = "README.rst"
 authors = [

@@ -1,5 +1,9 @@
+import os
+import platform
 from dataclasses import dataclass
+from typing import Optional
 from arpeggio import PTNodeVisitor
+from openscad_parser import getOpenSCADParser
 
 
 @dataclass
@@ -2739,7 +2743,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # Return the first child (module_instantiation or block)
         return children[0]
     
-    def visit_expr(self, node, children):
+    def visit_expr(self, node, children) -> Expression:
         # expr rule: [let_expr, assert_expr, echo_expr, funclit_def, ternary_expr, prec_logical_or]
         # This is a dispatcher - children are already processed by their respective visitor methods
         if not children:
@@ -2747,14 +2751,14 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # Return the first (and only) child, which is already the appropriate Expression AST node
         return children[0]
     
-    def visit_openscad_language(self, node, children):
+    def visit_openscad_language(self, node, children) -> list[ASTNode]:
         # openscad_language rule: (ZeroOrMore([use_statement, include_statement, statement]), EOF)
-        # Collect all statements, filtering out EOF
-        statements = [child for child in children if child is not None]
+        # Collect all statements, filtering out EOF (Terminal nodes) and None values
+        statements = [child for child in children if child is not None and isinstance(child, ASTNode)]
         return statements
 
 
-def parse_ast(parser, code, file=""):
+def parse_ast(parser, code, file="") -> list[ASTNode] | None:
     """Parse code and return AST nodes using ASTBuilderVisitor.
     
     This is the main public API for converting OpenSCAD code to an AST.
@@ -2772,4 +2776,199 @@ def parse_ast(parser, code, file=""):
     return visitor.visit_parse_tree(parse_tree)
 
 
+def getASTfromString(code: str) -> ASTNode | list[ASTNode] | None:
+    """
+    Parse OpenSCAD source code from a string and return its abstract syntax tree (AST).
+
+    This function creates a new OpenSCAD parser instance, parses the provided code string,
+    and returns the resulting AST (or list of AST nodes) for further analysis or processing.
+
+    Args:
+        code (str): The OpenSCAD source code to be parsed.
+
+    Returns:
+        ASTNode | list[ASTNode] | None: The AST representation of the OpenSCAD source code.
+            Returns None if the code is empty or does not contain valid statements.
+
+    Example:
+        ast = getASTfromString("cube([1,2,3]);")
+    """
+    parser = getOpenSCADParser(reduce_tree=False)
+    ast = parse_ast(parser, code)
+    return ast
+
+
+# Module-level cache for AST trees
+# Key: absolute file path (str)
+# Value: tuple of (AST nodes, modification timestamp)
+_ast_cache: dict[str, tuple[list[ASTNode] | None, float]] = {}
+
+
+def clear_ast_cache():
+    """Clear the in-memory AST cache.
+    
+    This function removes all cached AST trees, forcing all subsequent
+    calls to getASTfromFile() to re-parse files.
+    
+    Example:
+        clear_ast_cache()  # Clear all cached ASTs
+    """
+    _ast_cache.clear()
+
+
+def getASTfromFile(file: str) -> list[ASTNode] | None:
+    """
+    Parse an OpenSCAD source file and return its corresponding abstract syntax tree (AST).
+
+    This function reads the contents of the provided OpenSCAD file, parses it using the OpenSCAD parser,
+    and returns the resulting AST (or list of AST nodes) for further analysis or processing.
+    
+    The function caches AST trees in memory. Cache entries are automatically invalidated
+    if the file's modification timestamp changes, ensuring that updated files are re-parsed.
+
+    Args:
+        file (str): The OpenSCAD source file to be parsed.
+
+    Returns:
+        list[ASTNode] | None: The AST representation of the OpenSCAD source file.
+            Returns None if the file is empty or does not contain valid statements.
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+        Exception: If there is an error while reading the file.
+
+    Example:
+        ast = getASTfromFile("my_model.scad")
+    """
+    # Get absolute path for consistent cache keys
+    file_path = os.path.abspath(file)
+    
+    # Check if file exists and get its modification time
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {file} not found")
+    
+    current_mtime = os.path.getmtime(file_path)
+    
+    # Check cache
+    if file_path in _ast_cache:
+        cached_ast, cached_mtime = _ast_cache[file_path]
+        # If file hasn't been modified, return cached AST
+        if cached_mtime == current_mtime:
+            return cached_ast
+        # Otherwise, invalidate the cache entry
+        del _ast_cache[file_path]
+    
+    # Parse the file
+    try:
+        with open(file_path, 'r') as f:
+            code = f.read()
+    except Exception as e:
+        raise Exception(f"Error reading file {file}: {e}")
+    
+    parser = getOpenSCADParser(reduce_tree=False)
+    ast = parse_ast(parser, code, file_path)
+    
+    # Cache the result with current modification time
+    _ast_cache[file_path] = (ast, current_mtime)
+    
+    return ast
+
+
+def _find_library_file(currfile: str, libfile: str) -> Optional[str]:
+    """Find a library file using OpenSCAD's search path rules.
+    
+    Searches for the library file in the following order:
+    1. Directory of the current file (if currfile is provided)
+    2. Directories specified in OPENSCADPATH environment variable
+    3. Platform-specific default library directories
+    
+    Args:
+        currfile: Full path to the current OpenSCAD file (can be empty string)
+        libfile: Partial or full path to the library file to find
+        
+    Returns:
+        Full path to the found library file, or None if not found
+    """
+    dirs = []
+    
+    # Add directory of current file if provided
+    if currfile:
+        dirs.append(os.path.dirname(os.path.abspath(currfile)))
+    
+    # Determine path separator and default path based on platform
+    pathsep = ":"
+    dflt_path = ""
+    system = platform.system()
+    
+    if system == "Windows":
+        dflt_path = os.path.join(os.path.expanduser("~"), "Documents", "OpenSCAD", "libraries")
+        pathsep = ";"
+    elif system == "Darwin":
+        dflt_path = os.path.expanduser("~/Documents/OpenSCAD/libraries")
+    elif system == "Linux":
+        dflt_path = os.path.expanduser("~/.local/share/OpenSCAD/libraries")
+    
+    # Get OPENSCADPATH from environment or use default
+    env = os.getenv("OPENSCADPATH", dflt_path)
+    if env:
+        for path in env.split(pathsep):
+            expanded_path = os.path.expandvars(path)
+            if expanded_path:
+                dirs.append(expanded_path)
+    
+    # Search for the file in each directory
+    for d in dirs:
+        test_file = os.path.join(d, libfile)
+        if os.path.isfile(test_file):
+            return test_file
+    
+    return None
+
+
+def getASTfromLibraryFile(currfile: str, libfile: str) -> list[ASTNode] | None:
+    """
+    Find and parse an OpenSCAD library file using OpenSCAD's search path rules.
+    
+    This function searches for the library file in the following order:
+    1. Directory of the current file (if currfile is provided)
+    2. Directories specified in OPENSCADPATH environment variable
+    3. Platform-specific default library directories:
+       - Windows: ~/Documents/OpenSCAD/libraries
+       - macOS: ~/Documents/OpenSCAD/libraries
+       - Linux: ~/.local/share/OpenSCAD/libraries
+    
+    Once found, the file is parsed using getASTfromFile(), which includes
+    caching support.
+    
+    Args:
+        currfile: Full path to the current OpenSCAD file that wants to include/use
+                  the library file. Can be empty string if not available.
+        libfile: Partial or full path to the library file to find and parse.
+                 This is typically the path specified in a 'use' or 'include' statement.
+    
+    Returns:
+        list[ASTNode] | None: The AST representation of the library file.
+            Returns None if the file is empty or does not contain valid statements.
+    
+    Raises:
+        FileNotFoundError: If the library file cannot be found in any search path.
+        Exception: If there is an error while reading or parsing the file.
+    
+    Example:
+        # From a file at /path/to/main.scad that includes "utils/math.scad"
+        ast = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad")
+        
+        # Or without current file context
+        ast = getASTfromLibraryFile("", "MCAD/boxes.scad")
+    """
+    found_file = _find_library_file(currfile, libfile)
+    
+    if found_file is None:
+        raise FileNotFoundError(
+            f"Library file '{libfile}' not found in search paths. "
+            f"Searched in: current file directory, OPENSCADPATH, and platform default paths."
+        )
+    
+    # Use getASTfromFile() which includes caching
+    return getASTfromFile(found_file)
 
