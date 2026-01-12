@@ -1,13 +1,15 @@
 """Tests for AST convenience functions: getASTfromString, getASTfromFile, getASTfromLibraryFile."""
 
 import os
+import sys
+import time
 import tempfile
 import pytest
 from openscad_parser.ast import (
     getASTfromString,
     getASTfromFile,
     getASTfromLibraryFile,
-    _find_library_file,
+    findLibraryFile,
     clear_ast_cache,
     Assignment,
     ModuleDeclaration,
@@ -136,8 +138,6 @@ class TestGetASTfromFile:
 
     def test_cache_invalidation_on_modification(self):
         """Test that cache is invalidated when file is modified."""
-        import time
-        
         with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
             test_file = f.name
             f.write("x = 42;")
@@ -233,7 +233,7 @@ class TestFindLibraryFile:
             f.write("cube(10);")
         
         try:
-            found = _find_library_file(current_file, "library.scad")
+            found = findLibraryFile(current_file, "library.scad")
             assert found == lib_file
         finally:
             os.unlink(current_file)
@@ -254,13 +254,29 @@ class TestFindLibraryFile:
             f.write("function add(x, y) = x + y;")
         
         try:
-            found = _find_library_file(current_file, "utils/math.scad")
+            # Debug: check if function is in global scope and try both names
+            found = None
+            if "findLibraryFile" in globals():
+                found = findLibraryFile(current_file, "utils/math.scad")
+            elif "_find_library_file" in globals():
+                found = findLibraryFile(current_file, "utils/math.scad")
+            else:
+                # Try importing from src if available
+                try:
+                    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+                    found = findLibraryFile(current_file, "utils/math.scad")
+                except Exception as e:
+                    print("Could not import findLibraryFile:", e)
+                    raise
+
+            # Debug output
+            print("Expected lib_file:", lib_file)
+            print("Found file:      ", found)
             assert found == lib_file
         finally:
             os.unlink(current_file)
             os.unlink(lib_file)
             os.rmdir(utils_dir)
-
     def test_not_found_returns_none(self):
         """Test that None is returned when file is not found."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
@@ -268,7 +284,7 @@ class TestFindLibraryFile:
             f.write("// main file")
         
         try:
-            found = _find_library_file(current_file, "nonexistent.scad")
+            found = findLibraryFile(current_file, "nonexistent.scad")
             assert found is None
         finally:
             os.unlink(current_file)
@@ -277,7 +293,7 @@ class TestFindLibraryFile:
         """Test finding library file without current file context."""
         # This should search in OPENSCADPATH and platform defaults
         # We can't easily test platform defaults, but we can verify it doesn't crash
-        found = _find_library_file("", "nonexistent.scad")
+        found = findLibraryFile("", "nonexistent.scad")
         assert found is None  # Should return None if not found
 
 
