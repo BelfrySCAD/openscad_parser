@@ -3,6 +3,7 @@ import platform
 from typing import Optional
 from arpeggio import NoMatch
 from openscad_parser import getOpenSCADParser
+from .source_map import SourceMap, process_includes as process_includes_func
 
 # Import all AST nodes from nodes
 from .nodes import (
@@ -140,7 +141,7 @@ def findLibraryFile(currfile: str, libfile: str) -> Optional[str]:
 _find_library_file = findLibraryFile
 
 
-def parse_ast(parser, code, file="") -> list[ASTNode] | None:
+def parse_ast(parser, code, file="", source_map=None) -> list[ASTNode] | None:
     """Parse code and return AST nodes using ASTBuilderVisitor.
     
     This is the main public API for converting OpenSCAD code to an AST.
@@ -148,7 +149,8 @@ def parse_ast(parser, code, file="") -> list[ASTNode] | None:
     Args:
         parser: An Arpeggio parser instance (from getOpenSCADParser())
         code: The OpenSCAD code string to parse
-        file: Optional file path for source location tracking
+        file: Optional file path for source location tracking (deprecated, use source_map)
+        source_map: Optional SourceMap for tracking positions across multiple origins
         
     Returns:
         The root AST node (or list of AST nodes for the root level)
@@ -156,15 +158,57 @@ def parse_ast(parser, code, file="") -> list[ASTNode] | None:
     try:
         parse_tree = parser.parse(code)
     except NoMatch as e:
-        position = e.position
-        print(f"Syntax error at line {position.line}, column {position.column}:")
+        # Get character position from the exception - Arpeggio's NoMatch.position is an integer
+        char_pos = e.position if isinstance(e.position, int) else 0
+        
+        # Use source_map to get accurate error location if available
+        if source_map is not None:
+            location = source_map.get_location(char_pos)
+            error_origin = location.origin
+            error_line = location.line
+            error_column = location.column
+            # Get the source code from source_map
+            combined_code = source_map.get_combined_string()
+        else:
+            error_origin = file if file else "<unknown>"
+            # Calculate line and column from character position
+            if char_pos < 0:
+                char_pos = 0
+            if char_pos > len(code):
+                char_pos = len(code)
+            text_before = code[:char_pos]
+            error_line = text_before.count('\n') + 1
+            last_newline = text_before.rfind('\n')
+            error_column = char_pos - last_newline  # 1-indexed
+            combined_code = code
+        
+        # Extract the line where the error occurs
+        lines = combined_code.split('\n')
+        if 1 <= error_line <= len(lines):
+            error_line_code = lines[error_line - 1]
+            # Print error message
+            print(f"Syntax error in {error_origin} at line {error_line}, column {error_column}:")
+            print(error_line_code)
+            # Print caret under the error position
+            # Calculate caret position (accounting for tab characters)
+            caret_pos = error_column - 1
+            if caret_pos < 0:
+                caret_pos = 0
+            if caret_pos > len(error_line_code):
+                caret_pos = len(error_line_code)
+            # Expand tabs for display - calculate caret position in expanded line
+            expanded_caret_pos = len(error_line_code[:caret_pos].expandtabs())
+            print(' ' * expanded_caret_pos + '^')
+        else:
+            # Fallback if we can't get the line
+            print(f"Syntax error in {error_origin} at line {error_line}, column {error_column}:")
         return None
     else:
-        visitor = ASTBuilderVisitor(parser, file=file)
+        visitor = ASTBuilderVisitor(parser, source_map=source_map, file=file)
         return visitor.visit_parse_tree(parse_tree)
 
 
-def getASTfromString(code: str, include_comments: bool = False) -> ASTNode | list[ASTNode] | None:
+def getASTfromString(code: str, include_comments: bool = False, origin: str = "<string>") -> ASTNode | list[ASTNode] | None:
     """
     Parse OpenSCAD source code from a string and return its abstract syntax tree (AST).
 
@@ -174,6 +218,7 @@ def getASTfromString(code: str, include_comments: bool = False) -> ASTNode | lis
     Args:
         code (str): The OpenSCAD source code to be parsed.
         include_comments (bool): If True, include comments in the AST (default: False).
+        origin (str): Origin identifier for source location tracking (default: "<string>").
 
     Returns:
         ASTNode | list[ASTNode] | None: The AST representation of the OpenSCAD source code.
@@ -183,15 +228,19 @@ def getASTfromString(code: str, include_comments: bool = False) -> ASTNode | lis
         ast = getASTfromString("cube([1,2,3]);")
         ast_with_comments = getASTfromString("cube([1,2,3]); // comment", include_comments=True)
     """
+    # Create a source map for position tracking
+    source_map = SourceMap()
+    source_map.add_origin(origin, code)
+    
     parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
-    ast = parse_ast(parser, code)
+    ast = parse_ast(parser, code, source_map=source_map)
     return ast
 
 
 # Module-level cache for AST trees
-# Key: tuple of (absolute file path (str), include_comments (bool))
+# Key: tuple of (absolute file path (str), include_comments (bool), process_includes (bool))
 # Value: tuple of (AST nodes, modification timestamp)
-_ast_cache: dict[tuple[str, bool], tuple[list[ASTNode] | None, float]] = {}
+_ast_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {}
 
 
 def clear_ast_cache():
@@ -206,19 +255,36 @@ def clear_ast_cache():
     _ast_cache.clear()
 
 
-def getASTfromFile(file: str, include_comments: bool = False) -> list[ASTNode] | None:
+def getASTfromFile(file: str, include_comments: bool = False, process_includes: bool = True) -> list[ASTNode] | None:
     """
     Parse an OpenSCAD source file and return its corresponding abstract syntax tree (AST).
 
-    This function reads the contents of the provided OpenSCAD file, parses it using the OpenSCAD parser,
-    and returns the resulting AST (or list of AST nodes) for further analysis or processing.
-    
+    This function reads the contents of the provided OpenSCAD file, processes include statements,
+    parses it using the OpenSCAD parser, and returns the resulting AST (or list of AST nodes).
+
     The function caches AST trees in memory. Cache entries are automatically invalidated
     if the file's modification timestamp changes, ensuring that updated files are re-parsed.
+
+    Important: The `process_includes` parameter affects the AST structure:
+    
+    - When `process_includes=True` (default): Include statements are processed before parsing,
+      meaning the included file contents are inserted into the source code, and the AST will
+      NOT contain `IncludeStatement` nodes. The AST represents the code as if all includes
+      have been expanded.
+    
+    - When `process_includes=False`: Include statements are NOT processed, and the AST will
+      contain `IncludeStatement` nodes wherever `include <file>` statements appear in the
+      source code.
+    
+    Note: Unlike `include` statements, `use <file>` statements are ALWAYS parsed into
+    `UseStatement` AST nodes, regardless of the `process_includes` setting. This is because
+    `use` statements only affect module and function lookup at runtime, not source inclusion.
 
     Args:
         file (str): The OpenSCAD source file to be parsed.
         include_comments (bool): If True, include comments in the AST (default: False).
+        process_includes (bool): If True, process include statements and replace with file contents (default: True).
+            When False, the AST will contain IncludeStatement nodes where includes appear.
 
     Returns:
         list[ASTNode] | None: The AST representation of the OpenSCAD source file.
@@ -231,6 +297,8 @@ def getASTfromFile(file: str, include_comments: bool = False) -> list[ASTNode] |
     Example:
         ast = getASTfromFile("my_model.scad")
         ast_with_comments = getASTfromFile("my_model.scad", include_comments=True)
+        # Get AST with IncludeStatement nodes instead of processing includes
+        ast_with_include_nodes = getASTfromFile("my_model.scad", process_includes=False)
     """
     # Get absolute path for consistent cache keys
     file_path = os.path.abspath(file)
@@ -241,8 +309,8 @@ def getASTfromFile(file: str, include_comments: bool = False) -> list[ASTNode] |
     
     current_mtime = os.path.getmtime(file_path)
     
-    # Cache key includes file path and include_comments flag
-    cache_key = (file_path, include_comments)
+    # Cache key includes file path, include_comments flag, and process_includes flag
+    cache_key = (file_path, include_comments, process_includes)
     
     # Check cache
     if cache_key in _ast_cache:
@@ -253,15 +321,32 @@ def getASTfromFile(file: str, include_comments: bool = False) -> list[ASTNode] |
         # Otherwise, invalidate the cache entry
         del _ast_cache[cache_key]
     
-    # Parse the file
+    # Read the file
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             code = f.read()
     except Exception as e:
         raise Exception(f"Error reading file {file}: {e}")
     
+    # Create source map and process includes if requested
+    source_map = SourceMap()
+    source_map.add_origin(file_path, code)
+    
+    if process_includes:
+        try:
+            source_map = process_includes_func(source_map, file_path)
+        except FileNotFoundError as e:
+            # Re-raise file not found errors as-is
+            raise
+        except Exception as e:
+            raise Exception(f"Error processing includes: {e}")
+    
+    # Get the combined string for parsing
+    combined_code = source_map.get_combined_string()
+    
+    # Parse
     parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
-    ast = parse_ast(parser, code, file_path)
+    ast = parse_ast(parser, combined_code, source_map=source_map)
     
     # Cache the result with current modification time
     _ast_cache[cache_key] = (ast, current_mtime)
@@ -269,7 +354,7 @@ def getASTfromFile(file: str, include_comments: bool = False) -> list[ASTNode] |
     return ast
 
 
-def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = False) -> tuple[list[ASTNode] | None, str]:
+def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = False, process_includes: bool = True) -> tuple[list[ASTNode] | None, str]:
     """
     Find and parse an OpenSCAD library file using OpenSCAD's search path rules,
     and return both the AST and absolute path to the file.
@@ -283,7 +368,13 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
        - Linux: ~/.local/share/OpenSCAD/libraries
 
     Once found, the file is parsed using getASTfromFile(), which includes
-    caching support.
+    caching support and include processing.
+
+    Important: The `process_includes` parameter affects the AST structure (see getASTfromFile
+    documentation for details). When `process_includes=False`, the AST will contain
+    `IncludeStatement` nodes; when `True`, includes are processed and no `IncludeStatement`
+    nodes appear. Note that `use <file>` statements are always parsed into `UseStatement`
+    AST nodes regardless of the `process_includes` setting.
 
     Args:
         currfile: Full path to the current OpenSCAD file that wants to include/use
@@ -291,6 +382,8 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
         libfile: Partial or full path to the library file to find and parse.
                  This is typically the path specified in a 'use' or 'include' statement.
         include_comments (bool): If True, include comments in the AST (default: False).
+        process_includes (bool): If True, process include statements (default: True).
+            When False, the AST will contain IncludeStatement nodes where includes appear.
 
     Returns:
         tuple[list[ASTNode] | None, str]: The AST representation of the library file
@@ -309,6 +402,9 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
         
         # With comments
         ast, path = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad", include_comments=True)
+        
+        # Without processing includes (AST will contain IncludeStatement nodes)
+        ast, path = getASTfromLibraryFile("/path/to/main.scad", "utils/math.scad", process_includes=False)
     """
     found_file = findLibraryFile(currfile, libfile)
 
@@ -318,7 +414,7 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
             f"Searched in: current file directory, OPENSCADPATH, and platform default paths."
         )
 
-    # Use getASTfromFile() which includes caching
-    ast = getASTfromFile(found_file, include_comments=include_comments)
+    # Use getASTfromFile() which includes caching and include processing
+    ast = getASTfromFile(found_file, include_comments=include_comments, process_includes=process_includes)
     return ast, os.path.abspath(found_file)
 

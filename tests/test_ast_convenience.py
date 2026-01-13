@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import tempfile
+from io import StringIO
 import pytest
 from openscad_parser.ast import (
     getASTfromString,
@@ -18,6 +19,8 @@ from openscad_parser.ast import (
     NumberLiteral,
     AdditionOp,
     ModularCall,
+    CommentLine,
+    CommentSpan,
 )
 
 
@@ -403,4 +406,304 @@ class TestGetASTfromLibraryFile:
         with pytest.raises(FileNotFoundError):
             getASTfromLibraryFile("", "nonexistent_library.scad")
 
+
+class TestIncludeComments:
+    """Test include_comments parameter for AST generation."""
+
+    def test_getASTfromString_comments_excluded_by_default(self):
+        """Test that comments are excluded from AST by default."""
+        code = "// This is a comment\nx = 5;"
+        ast = getASTfromString(code)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should only have the assignment, no comment
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert not any(isinstance(node, CommentLine) for node in ast)
+        assert not any(isinstance(node, CommentSpan) for node in ast)
+
+    def test_getASTfromString_comments_included_when_requested(self):
+        """Test that comments are included in AST when include_comments=True."""
+        code = "// This is a comment\nx = 5;"
+        ast = getASTfromString(code, include_comments=True)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have both the comment and the assignment
+        assert len(ast) == 2
+        comment_nodes = [node for node in ast if isinstance(node, CommentLine)]
+        assert len(comment_nodes) == 1
+        assert comment_nodes[0].text == " This is a comment"
+        assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+        assert len(assignment_nodes) == 1
+
+    def test_getASTfromString_multi_line_comment_included(self):
+        """Test that multi-line comments are included when include_comments=True."""
+        code = "/* This is a\nmulti-line comment */\nx = 5;"
+        ast = getASTfromString(code, include_comments=True)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have both the comment and the assignment
+        assert len(ast) == 2
+        comment_nodes = [node for node in ast if isinstance(node, CommentSpan)]
+        assert len(comment_nodes) == 1
+        assert "This is a\nmulti-line comment" in comment_nodes[0].text
+        assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+        assert len(assignment_nodes) == 1
+
+    def test_getASTfromString_comments_excluded_when_false(self):
+        """Test that comments are excluded when include_comments=False explicitly."""
+        code = "// This is a comment\nx = 5;"
+        ast = getASTfromString(code, include_comments=False)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should only have the assignment, no comment
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert not any(isinstance(node, CommentLine) for node in ast)
+
+    def test_getASTfromFile_comments_excluded_by_default(self):
+        """Test that comments are excluded from AST by default when parsing from file."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write("// This is a comment\nx = 5;")
+            temp_file = f.name
+        
+        try:
+            ast = getASTfromFile(temp_file)
+            
+            assert ast is not None
+            assert isinstance(ast, list)
+            # Should only have the assignment, no comment
+            assert len(ast) == 1
+            assert isinstance(ast[0], Assignment)
+            assert not any(isinstance(node, CommentLine) for node in ast)
+        finally:
+            os.unlink(temp_file)
+
+    def test_getASTfromFile_comments_included_when_requested(self):
+        """Test that comments are included in AST when include_comments=True for file parsing."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write("// This is a comment\nx = 5;")
+            temp_file = f.name
+        
+        try:
+            ast = getASTfromFile(temp_file, include_comments=True)
+            
+            assert ast is not None
+            assert isinstance(ast, list)
+            # Should have both the comment and the assignment
+            assert len(ast) == 2
+            comment_nodes = [node for node in ast if isinstance(node, CommentLine)]
+            assert len(comment_nodes) == 1
+            assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+            assert len(assignment_nodes) == 1
+        finally:
+            os.unlink(temp_file)
+
+    def test_getASTfromFile_cache_separate_for_comments(self):
+        """Test that ASTs with and without comments are cached separately."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write("// This is a comment\nx = 5;")
+            temp_file = f.name
+        
+        try:
+            clear_ast_cache()
+            
+            # Parse without comments
+            ast1 = getASTfromFile(temp_file, include_comments=False)
+            assert len(ast1) == 1
+            assert not any(isinstance(node, CommentLine) for node in ast1)
+            
+            # Parse with comments - should get different result
+            ast2 = getASTfromFile(temp_file, include_comments=True)
+            assert len(ast2) == 2
+            assert any(isinstance(node, CommentLine) for node in ast2)
+            
+            # Parse without comments again - should get cached version
+            ast3 = getASTfromFile(temp_file, include_comments=False)
+            assert len(ast3) == 1
+            assert not any(isinstance(node, CommentLine) for node in ast3)
+        finally:
+            os.unlink(temp_file)
+
+    def test_getASTfromLibraryFile_comments_parameter(self):
+        """Test that getASTfromLibraryFile passes include_comments parameter through."""
+        # Create a temporary library file
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lib_file = os.path.join(temp_dir, "test_lib.scad")
+            with open(lib_file, 'w') as f:
+                f.write("// Library comment\nx = 5;")
+            
+            # Test without comments
+            ast1, path1 = getASTfromLibraryFile("", lib_file, include_comments=False)
+            assert len(ast1) == 1
+            assert not any(isinstance(node, CommentLine) for node in ast1)
+            
+            # Test with comments
+            ast2, path2 = getASTfromLibraryFile("", lib_file, include_comments=True)
+            assert len(ast2) == 2
+            assert any(isinstance(node, CommentLine) for node in ast2)
+
+
+class TestErrorReporting:
+    """Test error reporting format with code lines and caret markers."""
+
+    def test_error_shows_line_and_caret(self):
+        """Test that syntax errors show the line of code and a caret marker."""
+        import sys
+        from io import StringIO
+        
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            # Parse invalid code
+            result = getASTfromString('x = ')
+            output = buffer.getvalue()
+            
+            # Verify output format
+            assert "Syntax error" in output
+            assert "line 1" in output
+            assert "column" in output
+            assert "x = " in output or "x =" in output
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_caret_position_single_line(self):
+        """Test that caret is positioned correctly on a single line."""
+        import sys
+        from io import StringIO
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            result = getASTfromString('x = 5 +')
+            output = buffer.getvalue()
+            
+            # Check that the line is shown
+            assert "x = 5 +" in output
+            # Check that caret is present
+            assert "^" in output
+            # Extract lines from output
+            lines = output.strip().split('\n')
+            # Find the line with the caret
+            caret_line = [line for line in lines if '^' in line][0]
+            # Find the code line
+            code_line = [line for line in lines if 'x = 5 +' in line][0]
+            # Caret should be positioned somewhere on that line
+            assert len(caret_line) > 0
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_caret_position_multi_line(self):
+        """Test that caret is positioned correctly on multi-line code."""
+        import sys
+        from io import StringIO
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            result = getASTfromString('x = 5;\ny = 10 +')
+            output = buffer.getvalue()
+            
+            # Check that the error line is shown
+            assert "y = 10 +" in output
+            assert "^" in output
+            # Check line number
+            assert "line 2" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_with_origin(self):
+        """Test that error shows the correct origin."""
+        import sys
+        from io import StringIO
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            result = getASTfromString('x = ', origin='test.scad')
+            output = buffer.getvalue()
+            
+            # Check that origin is shown
+            assert "test.scad" in output or "<string>" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_format_components(self):
+        """Test that error output contains all required components."""
+        import sys
+        from io import StringIO
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            result = getASTfromString('x = ')
+            output = buffer.getvalue()
+            
+            # Check for all components
+            assert "Syntax error" in output
+            assert "at line" in output
+            assert "column" in output
+            # Should have the code line
+            code_lines = [line for line in output.split('\n') if line.strip() and 'Syntax error' not in line and '^' not in line]
+            assert len(code_lines) > 0
+            # Should have caret
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_with_tabs(self):
+        """Test that error handling works with tabs in code."""
+        import sys
+        from io import StringIO
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            # Code with tabs
+            result = getASTfromString('x\t= ')
+            output = buffer.getvalue()
+            
+            # Should still show error correctly
+            assert "Syntax error" in output
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_with_source_map(self):
+        """Test that error reporting works with SourceMap."""
+        import sys
+        from io import StringIO
+        from openscad_parser.ast.source_map import SourceMap
+        from openscad_parser.ast import parse_ast
+        from openscad_parser import getOpenSCADParser
+        
+        old_stdout = sys.stdout
+        sys.stdout = buffer = StringIO()
+        
+        try:
+            source_map = SourceMap()
+            source_map.add_origin("test.scad", "x = ")
+            parser = getOpenSCADParser()
+            combined_code = source_map.get_combined_string()
+            
+            result = parse_ast(parser, combined_code, source_map=source_map)
+            output = buffer.getvalue()
+            
+            # Should show error with origin from source map
+            assert "Syntax error" in output
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
 

@@ -430,6 +430,7 @@ def primary():
             ('(', expr, ')'),
             range_expr,
             vector_expr,
+            include_statement,
             TOK_UNDEF,
             TOK_TRUE,
             TOK_FALSE,

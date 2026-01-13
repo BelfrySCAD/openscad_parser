@@ -110,6 +110,13 @@ Use ``getASTfromFile()`` to parse an OpenSCAD file. This function includes autom
 
 The cache is automatically invalidated when the file is modified, ensuring you always get up-to-date results.
 
+**Include Processing:** By default, ``getASTfromFile()`` processes ``include <file>`` statements before parsing (``process_includes=True``). This means the AST will NOT contain ``IncludeStatement`` nodes - instead, the included file contents are expanded into the AST. Set ``process_includes=False`` to preserve ``IncludeStatement`` nodes in the AST::
+
+    # Get AST with IncludeStatement nodes preserved
+    ast_with_includes = getASTfromFile("my_model.scad", process_includes=False)
+
+**Note:** Unlike ``include`` statements, ``use <file>`` statements are ALWAYS parsed into ``UseStatement`` AST nodes, regardless of the ``process_includes`` setting. This is because ``use`` statements only affect module and function lookup at runtime, not source inclusion.
+
 Parsing Library Files
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -431,26 +438,42 @@ Main Functions
     :returns: AST node or list of AST nodes (for top-level statements)
     :rtype: ASTNode | list[ASTNode] | None
 
-``getASTfromFile(file: str)``
+``getASTfromFile(file: str, include_comments: bool = False, process_includes: bool = True)``
     Parse an OpenSCAD source file and return its AST. Includes automatic caching
     that invalidates when the file's modification timestamp changes.
 
     :param file: The OpenSCAD source file to be parsed
+    :param include_comments: If True, include comments in the AST (default: False)
+    :param process_includes: If True, process include statements and replace with file contents (default: True).
+        When False, the AST will contain IncludeStatement nodes where includes appear.
     :returns: List of AST nodes (for top-level statements)
     :rtype: list[ASTNode] | None
     :raises FileNotFoundError: If the specified file does not exist
     :raises Exception: If there is an error while reading the file
 
-``getASTfromLibraryFile(currfile: str, libfile: str)``
+    **Note:** When ``process_includes=True`` (default), the AST will NOT contain ``IncludeStatement`` nodes
+    because includes are processed before parsing. When ``process_includes=False``, ``IncludeStatement``
+    nodes will appear in the AST where ``include <file>`` statements exist in the source code.
+    
+    Unlike ``include`` statements, ``use <file>`` statements are ALWAYS parsed into ``UseStatement``
+    AST nodes regardless of the ``process_includes`` setting, since ``use`` only affects runtime
+    lookup, not source inclusion.
+
+``getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = False, process_includes: bool = True)``
     Find and parse an OpenSCAD library file using OpenSCAD's search path rules.
     Searches in: current file directory, OPENSCADPATH, and platform default paths.
 
     :param currfile: Full path to the current OpenSCAD file (can be empty string)
     :param libfile: Partial or full path to the library file to find
+    :param include_comments: If True, include comments in the AST (default: False)
+    :param process_includes: If True, process include statements (default: True).
+        When False, the AST will contain IncludeStatement nodes where includes appear.
     :returns: Tuple of (AST nodes list, absolute file path). The AST list is None if empty or not valid.
     :rtype: tuple[list[ASTNode] | None, str]
     :raises FileNotFoundError: If the library file cannot be found
     :raises Exception: If there is an error while reading or parsing the file
+
+    **Note:** The ``process_includes`` parameter affects the AST structure (see ``getASTfromFile`` documentation).
 
 ``parse_ast(parser, code, file="")``
     Parse OpenSCAD code and generate an AST (lower-level API).

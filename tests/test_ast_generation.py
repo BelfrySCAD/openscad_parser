@@ -112,19 +112,105 @@ class TestLiteralASTNodes:
 class TestCommentASTNodes:
     """Test AST generation for comments."""
 
-    def test_comment_line_ast(self, parser):
-        """Test CommentLine AST node generation."""
+    def test_comment_line_excluded_by_default(self, parser):
+        """Test that single-line comments are excluded from AST by default."""
         code = "// This is a comment\nx = 5;"
         ast = parse_ast(parser, code)
-        # Comments should be in the AST
-        # Note: Comments might be filtered or included depending on parser configuration
-        # This test verifies the structure can handle comments
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should only have the assignment, no comment
+        assert len(ast) == 1
+        assert not any(isinstance(node, CommentLine) for node in ast)
+        assert not any(isinstance(node, CommentSpan) for node in ast)
 
-    def test_comment_multi_ast(self, parser):
-        """Test CommentSpan AST node generation."""
+    def test_comment_multi_excluded_by_default(self, parser):
+        """Test that multi-line comments are excluded from AST by default."""
         code = "/* This is a\nmulti-line comment */\nx = 5;"
         ast = parse_ast(parser, code)
-        # Comments should be in the AST
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should only have the assignment, no comment
+        assert len(ast) == 1
+        assert not any(isinstance(node, CommentLine) for node in ast)
+        assert not any(isinstance(node, CommentSpan) for node in ast)
+
+    def test_comment_line_included_when_requested(self):
+        """Test that single-line comments are included in AST when include_comments=True."""
+        from openscad_parser import getOpenSCADParser
+        from openscad_parser.ast import parse_ast
+        
+        parser = getOpenSCADParser(reduce_tree=False, include_comments=True)
+        code = "// This is a comment\nx = 5;"
+        ast = parse_ast(parser, code)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have both the comment and the assignment
+        assert len(ast) == 2
+        comment_nodes = [node for node in ast if isinstance(node, CommentLine)]
+        assert len(comment_nodes) == 1
+        assert comment_nodes[0].text == " This is a comment"
+        # Verify assignment is still there
+        assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+        assert len(assignment_nodes) == 1
+
+    def test_comment_multi_included_when_requested(self):
+        """Test that multi-line comments are included in AST when include_comments=True."""
+        from openscad_parser import getOpenSCADParser
+        from openscad_parser.ast import parse_ast
+        
+        parser = getOpenSCADParser(reduce_tree=False, include_comments=True)
+        code = "/* This is a\nmulti-line comment */\nx = 5;"
+        ast = parse_ast(parser, code)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have both the comment and the assignment
+        assert len(ast) == 2
+        comment_nodes = [node for node in ast if isinstance(node, CommentSpan)]
+        assert len(comment_nodes) == 1
+        assert "This is a\nmulti-line comment" in comment_nodes[0].text
+        # Verify assignment is still there
+        assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+        assert len(assignment_nodes) == 1
+
+    def test_multiple_comments_included(self):
+        """Test that multiple comments are included when include_comments=True."""
+        from openscad_parser import getOpenSCADParser
+        from openscad_parser.ast import parse_ast
+        
+        parser = getOpenSCADParser(reduce_tree=False, include_comments=True)
+        code = "// First comment\nx = 5;\n// Second comment\ny = 10;"
+        ast = parse_ast(parser, code)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have 2 comments and 2 assignments = 4 nodes
+        assert len(ast) == 4
+        comment_nodes = [node for node in ast if isinstance(node, CommentLine)]
+        assert len(comment_nodes) == 2
+        assignment_nodes = [node for node in ast if isinstance(node, Assignment)]
+        assert len(assignment_nodes) == 2
+
+    def test_mixed_comment_types_included(self):
+        """Test that both single-line and multi-line comments are included."""
+        from openscad_parser import getOpenSCADParser
+        from openscad_parser.ast import parse_ast
+        
+        parser = getOpenSCADParser(reduce_tree=False, include_comments=True)
+        code = "// Single-line comment\n/* Multi-line\ncomment */\nx = 5;"
+        ast = parse_ast(parser, code)
+        
+        assert ast is not None
+        assert isinstance(ast, list)
+        # Should have 2 comments and 1 assignment = 3 nodes
+        assert len(ast) == 3
+        line_comments = [node for node in ast if isinstance(node, CommentLine)]
+        span_comments = [node for node in ast if isinstance(node, CommentSpan)]
+        assert len(line_comments) == 1
+        assert len(span_comments) == 1
 
 
 class TestExpressionASTNodes:
