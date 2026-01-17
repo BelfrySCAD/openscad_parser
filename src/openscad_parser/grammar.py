@@ -13,12 +13,20 @@ from arpeggio import (
 # --- OpenSCAD language parsing root ---
 
 def openscad_language():
-    return (ZeroOrMore([use_statement, include_statement, statement]), EOF)
+    return (ZeroOrMore(toplevel_statement), EOF)
 
 
 def openscad_language_with_comments():
     """Version of openscad_language that includes comments in the AST."""
-    return (ZeroOrMore([use_statement, include_statement, statement, comment]), EOF)
+    return (ZeroOrMore(toplevel_statement_or_comment), EOF)
+
+
+def toplevel_statement():
+    return [use_statement, include_statement, statement]
+
+
+def toplevel_statement_or_comment():
+    return [use_statement, include_statement, statement, comment]
 
 
 # --- Lexical and basic rules ---
@@ -40,8 +48,10 @@ def whitespace_only():
     return _(r'[ \t\n\r]+')
 
 
-def TOK_STRING():
-    return ('"', _(r'([^"\\]|\\.|\\$)*', str_repr='string'), '"')
+# --- Tokens ---
+
+def TOK_ID():
+    return _(r"(\$?[_A-Za-z][A-Za-z0-9_]*)", str_repr='string')
 
 
 def TOK_NUMBER():
@@ -52,12 +62,20 @@ def TOK_NUMBER():
         )
 
 
-def TOK_ID():
-    return _(r"(\$?[_A-Za-z][A-Za-z0-9_]*)", str_repr='string')
+def TOK_DQUOTE():
+    return '"'
 
 
 def TOK_COMMA():
     return ','
+
+
+def TOK_COLON():
+    return ':'
+
+
+def TOK_SEMICOLON():
+    return ';'
 
 
 def TOK_LOGICAL_OR():
@@ -69,7 +87,7 @@ def TOK_LOGICAL_AND():
 
 
 def TOK_LOGICAL_NOT():
-    return "!"
+    return ("!", Not('='))
 
 
 def TOK_BINARY_OR():
@@ -120,80 +138,187 @@ def TOK_ASSIGN():
     return ('=', Not('='))
 
 
-def TOK_USE():
+def TOK_QUESTION():
+    return '?'
+
+
+def TOK_PERIOD():
+    return '.'
+
+
+def TOK_PAREN():
+    return '('
+
+
+def TOK_ENDPAREN():
+    return ')'
+
+
+def TOK_BRACE():
+    return '{'
+
+
+def TOK_ENDBRACE():
+    return '}'
+
+
+def TOK_BRACKET():
+    return '['
+
+
+def TOK_ENDBRACKET():
+    return ']'
+
+
+def TOK_ADD():
+    return '+'
+
+
+def TOK_SUBTRACT():
+    return '-'
+
+
+def TOK_MULTIPLY():
+    return '*'
+
+
+def TOK_DIVIDE():
+    return '/'
+
+
+def TOK_MODULO():
+    return '%'
+
+
+def TOK_EXPONENT():
+    return '^'
+
+
+# --- Modular Modifiers ---
+
+def MOD_SHOW_ONLY():
+    return '!'
+
+
+def MOD_HIGHLIGHT():
+    return '#'
+
+
+def MOD_BACKGROUND():
+    return '%'
+
+
+def MOD_DISABLE():
+    return '*'
+
+
+# --- Keywords ---
+
+def KWD_USE():
     return Kwd('use')
 
 
-def TOK_INCLUDE():
+def KWD_INCLUDE():
     return Kwd('include')
 
 
-def TOK_MODULE():
+def KWD_MODULE():
     return Kwd('module')
 
 
-def TOK_FUNCTION():
+def KWD_FUNCTION():
     return Kwd('function')
 
 
-def TOK_IF():
+def KWD_IF():
     return Kwd('if')
 
 
-def TOK_ELSE():
+def KWD_ELSE():
     return Kwd('else')
 
 
-def TOK_FOR():
+def KWD_FOR():
     return Kwd('for')
 
 
-def TOK_INTERSECTION_FOR():
+def KWD_INTERSECTION_FOR():
     return Kwd('intersection_for')
 
 
-def TOK_LET():
+def KWD_LET():
     return Kwd('let')
 
 
-def TOK_ASSERT():
+def KWD_ASSERT():
     return Kwd('assert')
 
 
-def TOK_ECHO():
+def KWD_ECHO():
     return Kwd('echo')
 
 
-def TOK_EACH():
+def KWD_EACH():
     return Kwd('each')
 
 
-def TOK_TRUE():
+def KWD_TRUE():
     return Kwd('true')
 
 
-def TOK_FALSE():
+def KWD_FALSE():
     return Kwd('false')
 
 
-def TOK_UNDEF():
+def KWD_UNDEF():
     return Kwd('undef')
+
+
+# --- Identifiers ---
+
+def module_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
+
+
+def function_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
+
+
+def variable_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
+
+
+def module_instantiation_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
+
+
+def member_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
+
+
+def variable_or_function_name():
+    return (TOK_ID,)  # Tuple to prevent eliding the identifier
 
 
 # --- Grammar rules ---
 
+
+def use_include_file():
+    return (TOK_LT, _(r'[^>]*', str_repr='string'), TOK_GT)
+
+
 def use_statement():
-    return (TOK_USE, '<', _(r'[^>]+'), '>')
+    return (KWD_USE, use_include_file)
 
 
 def include_statement():
-    return (TOK_INCLUDE, '<', _(r'[^>]+'), '>')
+    return (KWD_INCLUDE, use_include_file)
 
 
 def statement():
     return [
-            ";",
-            ('{', ZeroOrMore(statement), '}'),
+            empty_statement,
+            statement_block,
             module_definition,
             function_definition,
             module_instantiation,
@@ -201,16 +326,24 @@ def statement():
         ]
 
 
+def empty_statement():
+    return TOK_SEMICOLON
+
+
+def statement_block():
+    return (TOK_BRACE, ZeroOrMore(statement), TOK_ENDBRACE)
+
+
 def module_definition():
-    return (TOK_MODULE, TOK_ID, '(', parameters, ')', statement)
+    return (KWD_MODULE, module_name, parameter_block, statement)
 
 
 def function_definition():
-    return (TOK_FUNCTION, TOK_ID, '(', parameters, ')', TOK_ASSIGN, expr, ';')
+    return (KWD_FUNCTION, function_name, parameter_block, TOK_ASSIGN, expr, TOK_SEMICOLON)
 
 
 def assignment():
-    return (TOK_ID, TOK_ASSIGN, expr, ';')
+    return (variable_name, TOK_ASSIGN, expr, TOK_SEMICOLON)
 
 
 def module_instantiation():
@@ -220,37 +353,40 @@ def module_instantiation():
             modifier_background,
             modifier_disable,
             ifelse_statement,
+            if_statement,
             single_module_instantiation
         ]
 
 
 def modifier_show_only():
-    return ('!', module_instantiation)
+    return (MOD_SHOW_ONLY, module_instantiation)
 
 
 def modifier_highlight():
-    return ('#', module_instantiation)
+    return (MOD_HIGHLIGHT, module_instantiation)
 
 
 def modifier_background():
-    return ('%', module_instantiation)
+    return (MOD_BACKGROUND, module_instantiation)
 
 
 def modifier_disable():
-    return ('*', module_instantiation)
+    return (MOD_DISABLE, module_instantiation)
+
+
+def if_statement():
+    return (KWD_IF, TOK_PAREN, expr, TOK_ENDPAREN, child_statement)
 
 
 def ifelse_statement():
-    return [
-            (TOK_IF, '(', expr, ')', child_statement,
-                TOK_ELSE, child_statement),
-            (TOK_IF, '(', expr, ')', child_statement)
-        ]
+    return (KWD_IF, TOK_PAREN, expr, TOK_ENDPAREN, child_statement, KWD_ELSE, child_statement)
 
 
 def single_module_instantiation():
     return [
+            modular_c_for,
             modular_for,
+            modular_intersection_c_for,
             modular_intersection_for,
             modular_let,
             modular_assert,
@@ -261,8 +397,8 @@ def single_module_instantiation():
 
 def child_statement():
     return [
-            ';',
-            ('{', ZeroOrMore([assignment, child_statement]), '}'),
+            empty_statement,
+            statement_block,
             module_instantiation
         ]
 
@@ -270,34 +406,63 @@ def child_statement():
 # --- Modules and Module Control Structures ---
 
 def modular_for():
-    return [
-            (TOK_FOR, "(", assignments_expr, ")", child_statement),
-            (TOK_FOR, "(", assignments_expr, ";", expr, ";", assignments_expr,
-                ")", child_statement)
-        ]
+    return (KWD_FOR, TOK_PAREN, assignments_expr, TOK_ENDPAREN, child_statement)
+
+
+def modular_c_for():
+    return (
+        KWD_FOR,
+        TOK_PAREN,
+        assignments_expr,
+        TOK_SEMICOLON,
+        expr,
+        TOK_SEMICOLON,
+        assignments_expr,
+        TOK_ENDPAREN,
+        child_statement
+    )
 
 
 def modular_intersection_for():
-    return (TOK_INTERSECTION_FOR, "(", assignments_expr, ")", child_statement)
+    return (KWD_INTERSECTION_FOR, TOK_PAREN, assignments_expr, TOK_ENDPAREN, child_statement)
+
+
+def modular_intersection_c_for():
+    return (
+        KWD_INTERSECTION_FOR,
+        TOK_PAREN,
+        assignments_expr,
+        TOK_SEMICOLON,
+        expr,
+        TOK_SEMICOLON,
+        assignments_expr,
+        TOK_ENDPAREN,
+        child_statement
+    )
 
 
 def modular_let():
-    return (TOK_LET, "(", assignments_expr, ")", child_statement)
+    return (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, child_statement)
 
 
 def modular_assert():
-    return (TOK_ASSERT, "(", arguments, ")", child_statement)
+    return (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, child_statement)
 
 
 def modular_echo():
-    return (TOK_ECHO, "(", arguments, ")", child_statement)
+    return (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, child_statement)
 
 
 def modular_call():
-    return (TOK_ID, "(", arguments, ")", child_statement)
+    return (module_instantiation_name, TOK_PAREN, arguments, TOK_ENDPAREN, child_statement)
 
 
-# --- Parameter and argument lists ---
+# --- Parameters used to define functions and modules ---
+
+
+def parameter_block():
+    return (TOK_PAREN, parameters, TOK_ENDPAREN)
+
 
 def parameters():
     return (ZeroOrMore(parameter, sep=TOK_COMMA), ZeroOrMore(TOK_COMMA))
@@ -305,9 +470,23 @@ def parameters():
 
 def parameter():
     return [
-            (TOK_ID, TOK_ASSIGN, expr),
-            TOK_ID
+            parameter_with_default,
+            parameter_without_default
         ]
+
+
+def parameter_with_default():
+    return (variable_name, TOK_ASSIGN, expr)
+
+
+def parameter_without_default():
+    return (variable_name, Not(TOK_ASSIGN))
+
+
+# --- Arguments used when calling functions and modules ---
+
+def argument_block():
+    return (TOK_PAREN, arguments, TOK_ENDPAREN)
 
 
 def arguments():
@@ -316,9 +495,17 @@ def arguments():
 
 def argument():
     return [
-            (TOK_ID, TOK_ASSIGN, expr),
-            expr
+            named_argument,
+            positional_argument
         ]
+
+
+def positional_argument():
+    return (expr, Not(TOK_ASSIGN))
+
+
+def named_argument():
+    return (variable_name, TOK_ASSIGN, expr)
 
 
 # --- Expressions ---
@@ -328,7 +515,7 @@ def assignments_expr():
 
 
 def assignment_expr():
-    return (TOK_ID, TOK_ASSIGN, expr)
+    return (variable_name, TOK_ASSIGN, expr)
 
 
 def expr():
@@ -343,23 +530,23 @@ def expr():
 
 
 def let_expr():
-    return (TOK_LET, '(', assignments_expr, ')', expr)
+    return (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, expr)
 
 
 def assert_expr():
-    return (TOK_ASSERT, '(', arguments, ')', Optional(expr))
+    return (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
 
 
 def echo_expr():
-    return (TOK_ECHO, '(', arguments, ')', Optional(expr))
+    return (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
 
 
 def funclit_def():
-    return (TOK_FUNCTION, '(', parameters, ')', expr)
+    return (KWD_FUNCTION, TOK_PAREN, parameters, TOK_ENDPAREN, expr)
 
 
 def ternary_expr():
-    return (prec_logical_or, '?', expr, ':', expr)
+    return (prec_logical_or, TOK_QUESTION, expr, TOK_COLON, expr)
 
 
 def prec_logical_or():
@@ -391,11 +578,11 @@ def prec_binary_shift():
 
 
 def prec_addition():
-    return OneOrMore(prec_multiplication, sep=['+', '-'])
+    return OneOrMore(prec_multiplication, sep=[TOK_ADD, TOK_SUBTRACT])
 
 
 def prec_multiplication():
-    return OneOrMore(prec_unary, sep=['*', '/', '%'])
+    return OneOrMore(prec_unary, sep=[TOK_MULTIPLY, TOK_DIVIDE, TOK_MODULO])
 
 
 def prec_unary():
@@ -404,7 +591,7 @@ def prec_unary():
 
 def prec_exponent():
     return [
-        (prec_call, '^', prec_unary),
+        (prec_call, TOK_EXPONENT, prec_unary),
         prec_call
     ]
 
@@ -414,37 +601,50 @@ def prec_call():
 
 
 def call_expr():
-    return ('(', arguments, ')')
+    return (argument_block,)
 
 
 def lookup_expr():
-    return ('[', expr, ']')
+    return (TOK_BRACKET, expr, TOK_ENDBRACKET)
 
 
 def member_expr():
-    return ('.', TOK_ID)
+    return (TOK_PERIOD, member_name)
+
+
+def string_contents():
+    return _(r'([^"\\]|\\.|\\$)*', str_repr='string')
+
+
+def string_literal():
+    return (TOK_DQUOTE, string_contents, TOK_DQUOTE)
 
 
 def primary():
     return [
-            ('(', expr, ')'),
+            paren_expr,
             range_expr,
             vector_expr,
             include_statement,
-            TOK_UNDEF,
-            TOK_TRUE,
-            TOK_FALSE,
-            TOK_STRING,
+            KWD_UNDEF,
+            KWD_TRUE,
+            KWD_FALSE,
+            string_literal,
             TOK_NUMBER,
-            TOK_ID
+            variable_or_function_name
         ]
 
+
+def paren_expr():
+    return (TOK_PAREN, expr, TOK_ENDPAREN)
+
+
 def range_expr():
-    return ('[', expr, ':', expr, Optional(':', expr), ']')
+    return (TOK_BRACKET, expr, TOK_COLON, expr, Optional(TOK_COLON, expr), TOK_ENDBRACKET)
 
 
 def vector_expr():
-    return ('[', vector_elements, Optional(TOK_COMMA), ']')
+    return (TOK_BRACKET, vector_elements, Optional(TOK_COMMA), TOK_ENDBRACKET)
 
 
 # --- Vector and list comprehension ---
@@ -459,35 +659,42 @@ def vector_element():
 
 def listcomp_elements():
     return [
-            ('(', listcomp_elements, ')'),
+            listcomp_paren_expr,
             listcomp_let,
             listcomp_each,
+            listcomp_c_for,
             listcomp_for,
             listcomp_ifelse,
+            listcomp_ifonly,
         ]
+
+
+def listcomp_paren_expr():
+    return (TOK_PAREN, listcomp_elements, TOK_ENDPAREN)
 
 
 def listcomp_let():
-    return (TOK_LET, '(', assignments_expr, ')', listcomp_elements)
+    return (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, listcomp_elements)
 
 
 def listcomp_each():
-    return (TOK_EACH, vector_element)
+    return (KWD_EACH, vector_element)
 
 
 def listcomp_for():
-    return [
-            (TOK_FOR, '(', assignments_expr, ';', expr, ';',
-                assignments_expr, ')', vector_element),
-            (TOK_FOR, '(', assignments_expr, ')', vector_element),
-        ]
+    return (KWD_FOR, TOK_PAREN, assignments_expr, TOK_ENDPAREN, vector_element)
+
+
+def listcomp_c_for():
+    return (KWD_FOR, TOK_PAREN, assignments_expr, TOK_SEMICOLON, expr, TOK_SEMICOLON, assignments_expr, TOK_ENDPAREN, vector_element)
+
+
+def listcomp_ifonly():
+    return (KWD_IF, TOK_PAREN, expr, TOK_ENDPAREN, vector_element)
 
 
 def listcomp_ifelse():
-    return [
-            (TOK_IF, '(', expr, ')', vector_element, TOK_ELSE, vector_element),
-            (TOK_IF, '(', expr, ')', vector_element)
-        ]
+    return (KWD_IF, TOK_PAREN, expr, TOK_ENDPAREN, vector_element, KWD_ELSE, vector_element)
 
 
 # vim: set ts=4 sw=4 expandtab:

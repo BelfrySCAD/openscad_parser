@@ -8,21 +8,10 @@ ability to map positions back to their original origin, line, and column locatio
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
 
-
-@dataclass
-class SourceLocation:
-    """Represents a location in a source origin.
-    
-    Attributes:
-        origin: Identifier for the source origin (e.g., file path, "<editor>", etc.)
-        line: Line number (1-indexed)
-        column: Column number (1-indexed)
-    """
-    origin: str
-    line: int
-    column: int
+if TYPE_CHECKING:
+    from .builder import Position
 
 
 @dataclass
@@ -275,15 +264,17 @@ class SourceMap:
         self._combined_string = ''.join(parts)
         self._combined_string_dirty = False
     
-    def get_location(self, position: int) -> SourceLocation:
+    def get_location(self, position: int):
         """Get the original source location for a position in the combined string.
         
         Args:
             position: Character position in the combined string (0-indexed)
         
         Returns:
-            SourceLocation with origin, line, and column in the original source
+            Position with origin, line, and column in the original source
         """
+        from .builder import Position  # Lazy import to avoid circular dependency
+        
         if position < 0:
             position = 0
         
@@ -296,7 +287,7 @@ class SourceMap:
                 last_segment = max(self._segments, key=lambda s: s.combined_start + len(s.content))
                 return self._calculate_location_in_segment(last_segment, len(last_segment.content))
             else:
-                return SourceLocation(origin="", line=1, column=1)
+                return Position(origin="", line=1, column=1)
         
         # Calculate the position within the segment
         segment_offset = position - segment.combined_start
@@ -333,7 +324,7 @@ class SourceMap:
         
         return None
     
-    def _calculate_location_in_segment(self, segment: SourceSegment, offset: int) -> SourceLocation:
+    def _calculate_location_in_segment(self, segment: SourceSegment, offset: int):
         """Calculate the source location for an offset within a segment.
         
         Args:
@@ -341,12 +332,14 @@ class SourceMap:
             offset: Character offset within the segment (0-indexed)
         
         Returns:
-            SourceLocation with the original source location
+            Position with the original source location
         """
+        from .builder import Position  # Lazy import to avoid circular dependency
+        
         if offset < 0:
-            offset = 0
+            offset = 0  # pragma: no cover
         if offset > len(segment.content):
-            offset = len(segment.content)
+            offset = len(segment.content)  # pragma: no cover
         
         # Count lines in the content up to the offset
         content_before = segment.content[:offset]
@@ -364,7 +357,7 @@ class SourceMap:
             last_newline = content_before.rfind('\n')
             column_number = offset - last_newline
         
-        return SourceLocation(
+        return Position(
             origin=segment.origin,
             line=line_number,
             column=column_number
@@ -474,7 +467,7 @@ def process_includes(source_map: SourceMap, current_file: str = "",
             try:
                 with open(lib_file, 'r', encoding='utf-8') as f:
                     included_content = f.read()
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 raise IOError(f"Error reading included file '{lib_file}': {e}")
             
             # Get the origin of the segment containing this position

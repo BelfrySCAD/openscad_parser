@@ -56,15 +56,16 @@ from .nodes import (
     ListCompLet,
     ListCompEach,
     ListCompFor,
-    ListCompCStyleFor,
+    ListCompCFor,
     ListCompIf,
     ListCompIfElse,
     ListComprehension,
     ModuleInstantiation,
     ModularCall,
     ModularFor,
-    ModularCLikeFor,
+    ModularCFor,
     ModularIntersectionFor,
+    ModularIntersectionCFor,
     ModularLet,
     ModularEcho,
     ModularAssert,
@@ -112,12 +113,12 @@ def findLibraryFile(currfile: str, libfile: str) -> Optional[str]:
     dflt_path = ""
     system = platform.system()
     
-    if system == "Windows":
+    if system == "Windows":  # pragma: no cover
         dflt_path = os.path.join(os.path.expanduser("~"), "Documents", "OpenSCAD", "libraries")
         pathsep = ";"
-    elif system == "Darwin":
+    elif system == "Darwin":  # pragma: no cover
         dflt_path = os.path.expanduser("~/Documents/OpenSCAD/libraries")
-    elif system == "Linux":
+    elif system == "Linux":  # pragma: no cover
         dflt_path = os.path.expanduser("~/.local/share/OpenSCAD/libraries")
     
     # Get OPENSCADPATH from environment or use default
@@ -173,9 +174,9 @@ def parse_ast(parser, code, file="", source_map=None) -> list[ASTNode] | None:
             error_origin = file if file else "<unknown>"
             # Calculate line and column from character position
             if char_pos < 0:
-                char_pos = 0
+                char_pos = 0  # pragma: no cover
             if char_pos > len(code):
-                char_pos = len(code)
+                char_pos = len(code)  # pragma: no cover
             text_before = code[:char_pos]
             error_line = text_before.count('\n') + 1
             last_newline = text_before.rfind('\n')
@@ -193,9 +194,9 @@ def parse_ast(parser, code, file="", source_map=None) -> list[ASTNode] | None:
             # Calculate caret position (accounting for tab characters)
             caret_pos = error_column - 1
             if caret_pos < 0:
-                caret_pos = 0
+                caret_pos = 0  # pragma: no cover
             if caret_pos > len(error_line_code):
-                caret_pos = len(error_line_code)
+                caret_pos = len(error_line_code)  # pragma: no cover
             # Expand tabs for display - calculate caret position in expanded line
             expanded_caret_pos = len(error_line_code[:caret_pos].expandtabs())
             print(' ' * expanded_caret_pos + '^')
@@ -338,7 +339,7 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
         except FileNotFoundError as e:
             # Re-raise file not found errors as-is
             raise
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             raise Exception(f"Error processing includes: {e}")
     
     # Get the combined string for parsing

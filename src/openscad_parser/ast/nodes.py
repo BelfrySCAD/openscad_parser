@@ -116,6 +116,9 @@ class Identifier(Primary):
     def __str__(self):
         return self.name
 
+    def __repr__(self):
+        return f"Identifier('{self.name}')"
+
 
 @dataclass
 class StringLiteral(Primary):
@@ -1053,7 +1056,7 @@ class ListCompFor(VectorElement):
         
 
 @dataclass
-class ListCompCStyleFor(VectorElement):
+class ListCompCFor(VectorElement):
     """Represents a C-style for loop within a list comprehension.
     
     C-style for loops have three parts: initialization, condition, and increment.
@@ -1205,7 +1208,7 @@ class ModularFor(ModuleInstantiation):
         
 
 @dataclass
-class ModularCLikeFor(ModuleInstantiation):
+class ModularCFor(ModuleInstantiation):
     """Represents a C-style for loop module instantiation.
     
     C-style for loops have three parts: initialization, condition, and increment.
@@ -1250,6 +1253,37 @@ class ModularIntersectionFor(ModuleInstantiation):
     def __str__(self):
         return f"intersection_for ({', '.join(str(assignment) for assignment in self.assignments)}) {self.body}"
         
+@dataclass
+class ModularIntersectionCFor(ModuleInstantiation):
+    """Represents an intersection_for C-style loop module instantiation.
+
+    Similar to a C-style for loop, but computes the intersection of all
+    iterations rather than the union. Used for creating complex intersections
+    that use explicit initialization, condition, and increment.
+
+    Examples:
+        intersection_for(i = 0; i < 3; i = i + 1) rotate([0,0,i*90]) cube(10);
+
+    Attributes:
+        initial: List of initialization assignments.
+        condition: The loop continuation condition.
+        increment: List of increment assignments.
+        body: The module instantiation to execute for each iteration.
+    """
+    initial: list[Assignment]
+    condition: Expression
+    increment: list[Assignment]
+    body: ModuleInstantiation
+
+    def __str__(self):
+        return (
+            f"intersection_for ("
+            f"{'; '.join(str(a) for a in self.initial)}; "
+            f"{self.condition}; "
+            f"{', '.join(str(a) for a in self.increment)}"
+            f") {self.body}"
+        )
+
 
 @dataclass
 class ModularLet(ModuleInstantiation):

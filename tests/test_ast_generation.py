@@ -17,11 +17,11 @@ from openscad_parser.ast import (
     FunctionLiteral, PrimaryCall, PrimaryIndex, PrimaryMember,
     ModuleDeclaration, FunctionDeclaration,
     UseStatement, IncludeStatement,
-    ModularCall, ModularFor, ModularCLikeFor, ModularIntersectionFor,
+    ModularCall, ModularFor, ModularCFor, ModularIntersectionFor, ModularIntersectionCFor,
     ModularLet, ModularEcho, ModularAssert,
     ModularIf, ModularIfElse,
     ModularModifierShowOnly, ModularModifierHighlight, ModularModifierBackground, ModularModifierDisable,
-    ListComprehension, ListCompLet, ListCompEach, ListCompFor, ListCompCStyleFor,
+    ListComprehension, ListCompLet, ListCompEach, ListCompFor, ListCompCFor,
     ListCompIf, ListCompIfElse,
     Position
 )
@@ -220,60 +220,77 @@ class TestExpressionASTNodes:
         """Test AdditionOp AST node generation."""
         code = "x = 1 + 2;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, AdditionOp)
-        assert isinstance(assignment.expr.left, NumberLiteral)
-        assert isinstance(assignment.expr.right, NumberLiteral)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, AdditionOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_subtraction_ast(self, parser):
         """Test SubtractionOp AST node generation."""
         code = "x = 5 - 3;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, SubtractionOp)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, SubtractionOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_multiplication_ast(self, parser):
         """Test MultiplicationOp AST node generation."""
         code = "x = 2 * 3;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, MultiplicationOp)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, MultiplicationOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_division_ast(self, parser):
         """Test DivisionOp AST node generation."""
         code = "x = 10 / 2;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, DivisionOp)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, DivisionOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_modulo_ast(self, parser):
         """Test ModuloOp AST node generation."""
         code = "x = 10 % 3;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, ModuloOp)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, ModuloOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_exponent_ast(self, parser):
         """Test ExponentOp AST node generation."""
         code = "x = 2 ^ 3;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, ExponentOp)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, ExponentOp)
+        assert isinstance(ast[0].expr.left, NumberLiteral)
+        assert isinstance(ast[0].expr.right, NumberLiteral)
 
     def test_unary_minus_ast(self, parser):
         """Test UnaryMinusOp AST node generation."""
         code = "x = -5;"
         ast = parse_ast(parser, code)
-        assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
-        assert isinstance(assignment.expr, UnaryMinusOp)
-        assert isinstance(assignment.expr.expr, NumberLiteral)
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, UnaryMinusOp)
+        assert isinstance(ast[0].expr.expr, NumberLiteral)
 
     def test_logical_and_ast(self, parser):
         """Test LogicalAndOp AST node generation."""
@@ -281,6 +298,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, LogicalAndOp)
 
     def test_logical_or_ast(self, parser):
@@ -289,6 +308,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, LogicalOrOp)
 
     def test_logical_not_ast(self, parser):
@@ -297,6 +318,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, LogicalNotOp)
 
     def test_equality_ast(self, parser):
@@ -305,6 +328,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, EqualityOp)
 
     def test_inequality_ast(self, parser):
@@ -313,6 +338,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, InequalityOp)
 
     def test_comparison_operators_ast(self, parser):
@@ -330,6 +357,8 @@ class TestExpressionASTNodes:
             ast = parse_ast(fresh_parser, code)
             assignment = ast[0] if isinstance(ast, list) else ast
             assert assignment is not None
+            assert isinstance(assignment, Assignment)
+            assert assignment.expr is not None
             assert isinstance(assignment.expr, expected_type), f"Failed for {code}"
 
     def test_ternary_ast(self, parser):
@@ -338,6 +367,8 @@ class TestExpressionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, TernaryOp)
         assert isinstance(assignment.expr.condition, BooleanLiteral)
         assert isinstance(assignment.expr.true_expr, NumberLiteral)
@@ -359,6 +390,8 @@ class TestExpressionASTNodes:
             ast = parse_ast(fresh_parser, code)
             assignment = ast[0] if isinstance(ast, list) else ast
             assert assignment is not None
+            assert isinstance(assignment, Assignment)
+            assert assignment.expr is not None
             assert isinstance(assignment.expr, expected_type), f"Failed for {code}"
 
     def test_operator_precedence_ast(self, parser):
@@ -368,6 +401,8 @@ class TestExpressionASTNodes:
         assignment = ast[0] if isinstance(ast, list) else ast
         # Should be: 1 + (2 * 3)
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, AdditionOp)
         assert isinstance(assignment.expr.right, MultiplicationOp)
 
@@ -381,6 +416,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert isinstance(assignment.expr.left, Identifier)
         assert assignment.expr.left.name == "foo"
@@ -392,6 +429,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert isinstance(assignment.expr.left, Identifier)
         assert assignment.expr.left.name == "foo"
@@ -406,6 +445,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert isinstance(assignment.expr.left, Identifier)
         assert assignment.expr.left.name == "foo"
@@ -421,6 +462,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert isinstance(assignment.expr.left, Identifier)
         assert assignment.expr.left.name == "foo"
@@ -434,6 +477,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert len(assignment.expr.arguments) == 2
         assert isinstance(assignment.expr.arguments[0], NamedArgument)
@@ -448,7 +493,9 @@ class TestFunctionCallASTNodes:
         code = "x = foo(1, b=2);"
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
-        assert assignment is not None
+        assert assignment is not None   
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryCall)
         assert len(assignment.expr.arguments) == 2
         assert isinstance(assignment.expr.arguments[0], PositionalArgument)
@@ -462,6 +509,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryIndex)
         assert isinstance(assignment.expr.left, Identifier)
         assert isinstance(assignment.expr.index, NumberLiteral)
@@ -472,6 +521,8 @@ class TestFunctionCallASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, PrimaryMember)
         assert isinstance(assignment.expr.left, Identifier)
         assert isinstance(assignment.expr.member, Identifier)
@@ -487,6 +538,8 @@ class TestControlStructureASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, LetOp)
         assert len(assignment.expr.assignments) == 2
         assert isinstance(assignment.expr.assignments[0], Assignment)
@@ -498,6 +551,8 @@ class TestControlStructureASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, EchoOp)
         assert len(assignment.expr.arguments) >= 1
         assert isinstance(assignment.expr.body, NumberLiteral)
@@ -508,6 +563,8 @@ class TestControlStructureASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, AssertOp)
         assert len(assignment.expr.arguments) >= 1
         assert isinstance(assignment.expr.body, NumberLiteral)
@@ -990,6 +1047,8 @@ class TestFunctionASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, FunctionLiteral)
         assert isinstance(assignment.expr.body, MultiplicationOp)
 
@@ -1038,11 +1097,10 @@ class TestPositionASTNodes:
         assert hasattr(assignment, 'position')
         assert assignment is not None
         assert isinstance(assignment.position, Position)
-        assert assignment.position.file == "test.scad"
-        assert assignment.position.position >= 0
-        # Test lazy evaluation of line/char
+        assert assignment.position.origin == "test.scad"
+        # Test line and column
         assert assignment.position.line >= 1
-        assert assignment.position.char >= 1
+        assert assignment.position.column >= 1
 
     def test_position_lazy_evaluation(self, parser):
         """Test that position line/char are calculated lazily."""
@@ -1063,6 +1121,8 @@ class TestComplexASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
+        assert assignment.expr is not None
         assert isinstance(assignment.expr, MultiplicationOp)
         assert isinstance(assignment.expr.left, AdditionOp)
 
@@ -1072,6 +1132,7 @@ class TestComplexASTNodes:
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert assignment is not None
+        assert isinstance(assignment, Assignment)
         # Should be: PrimaryCall(PrimaryCall(Identifier("foo"), [1]), [2])
         assert isinstance(assignment.expr, PrimaryCall)
         assert isinstance(assignment.expr.left, PrimaryCall)

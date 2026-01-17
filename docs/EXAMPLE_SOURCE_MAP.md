@@ -141,14 +141,14 @@ Main class for managing source maps.
 - `get_combined_string() -> str`
   - Get the combined source string from all added origins
 
-- `get_location(position: int) -> SourceLocation`
+- `get_location(position: int) -> Position`
   - Get the original source location for a position in the combined string
-  - Returns a `SourceLocation` with `origin`, `line`, and `column` attributes
+  - Returns a `Position` with `origin`, `line`, and `column` attributes
 
 - `get_segments() -> list[SourceSegment]`
   - Get all source segments (for debugging/inspection)
 
-### `SourceLocation`
+### `Position`
 
 Represents a location in a source origin.
 

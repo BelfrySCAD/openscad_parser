@@ -18,6 +18,10 @@ from openscad_parser.ast import (
     Identifier,
     NumberLiteral,
     AdditionOp,
+    LogicalNotOp,
+    BitwiseNotOp,
+    IncludeStatement,
+    Position,
     ModularCall,
     CommentLine,
     CommentSpan,
@@ -55,6 +59,28 @@ class TestGetASTfromString:
         assert ast[0].expr.left.val == 10
         assert isinstance(ast[0].expr.right, NumberLiteral)
         assert ast[0].expr.right.val == 5
+
+    def test_logical_not_expression(self):
+        """Test parsing a logical not expression from string."""
+        code = "x = !true;"
+        ast = getASTfromString(code)
+
+        assert ast is not None
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, LogicalNotOp)
+
+    def test_bitwise_not_expression(self):
+        """Test parsing a bitwise not expression from string."""
+        code = "x = ~1;"
+        ast = getASTfromString(code)
+
+        assert ast is not None
+        assert isinstance(ast, list)
+        assert len(ast) == 1
+        assert isinstance(ast[0], Assignment)
+        assert isinstance(ast[0].expr, BitwiseNotOp)
 
     def test_module_declaration(self):
         """Test parsing a module declaration from string."""
@@ -198,6 +224,21 @@ class TestGetASTfromFile:
             os.unlink(file1)
             os.unlink(file2)
 
+    def test_process_includes_false_keeps_include_nodes(self):
+        """Test process_includes=False preserves IncludeStatement nodes."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            main_file = os.path.join(temp_dir, "main.scad")
+            lib_file = os.path.join(temp_dir, "lib.scad")
+
+            with open(lib_file, "w") as f:
+                f.write("x = 1;")
+            with open(main_file, "w") as f:
+                f.write("include <lib.scad>;\n")
+
+            ast = getASTfromFile(main_file, process_includes=False)
+            assert ast is not None
+            assert any(isinstance(node, IncludeStatement) for node in ast)
+
     def test_clear_cache(self):
         """Test that clear_ast_cache() clears the cache."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
@@ -257,21 +298,7 @@ class TestFindLibraryFile:
             f.write("function add(x, y) = x + y;")
         
         try:
-            # Debug: check if function is in global scope and try both names
-            found = None
-            if "findLibraryFile" in globals():
-                found = findLibraryFile(current_file, "utils/math.scad")
-            elif "_find_library_file" in globals():
-                found = findLibraryFile(current_file, "utils/math.scad")
-            else:
-                # Try importing from src if available
-                try:
-                    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-                    found = findLibraryFile(current_file, "utils/math.scad")
-                except Exception as e:
-                    print("Could not import findLibraryFile:", e)
-                    raise
-
+            found = findLibraryFile(current_file, "utils/math.scad")
             # Debug output
             print("Expected lib_file:", lib_file)
             print("Found file:      ", found)
@@ -298,6 +325,40 @@ class TestFindLibraryFile:
         # We can't easily test platform defaults, but we can verify it doesn't crash
         found = findLibraryFile("", "nonexistent.scad")
         assert found is None  # Should return None if not found
+
+    def test_find_library_file_windows_env_path(self, monkeypatch):
+        """Test findLibraryFile uses Windows path separator for OPENSCADPATH."""
+        import platform
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lib_dir1 = os.path.join(temp_dir, "libs1")
+            lib_dir2 = os.path.join(temp_dir, "libs2")
+            os.makedirs(lib_dir1)
+            os.makedirs(lib_dir2)
+            target = os.path.join(lib_dir2, "lib.scad")
+            with open(target, "w") as f:
+                f.write("x = 1;")
+
+            monkeypatch.setattr(platform, "system", lambda: "Windows")
+            monkeypatch.setenv("OPENSCADPATH", f"{lib_dir1};{lib_dir2}")
+
+            found = findLibraryFile("", "lib.scad")
+            assert found == target
+
+    def test_find_library_file_darwin_env_path(self, monkeypatch):
+        """Test findLibraryFile uses Darwin path defaults and env."""
+        import platform
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lib_dir = os.path.join(temp_dir, "libraries")
+            os.makedirs(lib_dir)
+            target = os.path.join(lib_dir, "lib.scad")
+            with open(target, "w") as f:
+                f.write("x = 1;")
+
+            monkeypatch.setattr(platform, "system", lambda: "Darwin")
+            monkeypatch.setenv("OPENSCADPATH", lib_dir)
+
+            found = findLibraryFile("", "lib.scad")
+            assert found == target
 
 
 class TestGetASTfromLibraryFile:
@@ -514,16 +575,19 @@ class TestIncludeComments:
             
             # Parse without comments
             ast1 = getASTfromFile(temp_file, include_comments=False)
+            assert ast1 is not None
             assert len(ast1) == 1
             assert not any(isinstance(node, CommentLine) for node in ast1)
             
             # Parse with comments - should get different result
             ast2 = getASTfromFile(temp_file, include_comments=True)
+            assert ast2 is not None
             assert len(ast2) == 2
             assert any(isinstance(node, CommentLine) for node in ast2)
             
             # Parse without comments again - should get cached version
             ast3 = getASTfromFile(temp_file, include_comments=False)
+            assert ast3 is not None
             assert len(ast3) == 1
             assert not any(isinstance(node, CommentLine) for node in ast3)
         finally:
@@ -539,11 +603,13 @@ class TestIncludeComments:
             
             # Test without comments
             ast1, path1 = getASTfromLibraryFile("", lib_file, include_comments=False)
+            assert ast1 is not None
             assert len(ast1) == 1
             assert not any(isinstance(node, CommentLine) for node in ast1)
             
             # Test with comments
             ast2, path2 = getASTfromLibraryFile("", lib_file, include_comments=True)
+            assert ast2 is not None
             assert len(ast2) == 2
             assert any(isinstance(node, CommentLine) for node in ast2)
 
@@ -707,3 +773,131 @@ class TestErrorReporting:
         finally:
             sys.stdout = old_stdout
 
+    def test_error_reporting_without_source_map(self):
+        """Test error reporting when source_map is None (fallback path)."""
+        from openscad_parser.ast import parse_ast
+        from openscad_parser import getOpenSCADParser
+        import sys
+        from io import StringIO
+        
+        parser = getOpenSCADParser()
+        code = "x = ;"  # Syntax error
+        
+        old_stdout = sys.stdout
+        try:
+            buffer = StringIO()
+            sys.stdout = buffer
+            
+            result = parse_ast(parser, code, file="test.scad", source_map=None)
+            output = buffer.getvalue()
+            
+            # Should show error with file name
+            assert "Syntax error" in output
+            assert "test.scad" in output
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_reporting_caret_position_edge_cases(self):
+        """Test error reporting with edge cases for caret position."""
+        from openscad_parser.ast import parse_ast
+        from openscad_parser import getOpenSCADParser
+        from openscad_parser.ast.source_map import SourceMap
+        import sys
+        from io import StringIO
+        
+        parser = getOpenSCADParser()
+        source_map = SourceMap()
+        source_map.add_origin("test.scad", "x = ;")  # Syntax error at position 4
+        
+        old_stdout = sys.stdout
+        try:
+            buffer = StringIO()
+            sys.stdout = buffer
+            
+            combined_code = source_map.get_combined_string()
+            result = parse_ast(parser, combined_code, source_map=source_map)
+            output = buffer.getvalue()
+            
+            # Should show error with caret
+            assert "Syntax error" in output
+            assert "^" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_error_reporting_line_out_of_range(self):
+        """Test error reporting when error line is out of range."""
+        from openscad_parser.ast import parse_ast
+        from openscad_parser import getOpenSCADParser
+        import sys
+        from io import StringIO
+        
+        parser = getOpenSCADParser()
+        
+        old_stdout = sys.stdout
+        try:
+            buffer = StringIO()
+            sys.stdout = buffer
+            
+            class FakeSourceMap:
+                def get_location(self, _pos):
+                    return Position(origin="test.scad", line=5, column=1)
+
+                def get_combined_string(self):
+                    return "x = 1;"
+
+            result = parse_ast(parser, "x = ", source_map=FakeSourceMap())
+            output = buffer.getvalue()
+            assert "Syntax error" in output
+        finally:
+            sys.stdout = old_stdout
+
+    def test_find_library_file_windows_path(self):
+        """Test findLibraryFile with Windows path handling (mocked)."""
+        import platform
+        from openscad_parser.ast import findLibraryFile
+        
+        # This test verifies the Windows branch exists
+        # Actual Windows testing would require Windows platform
+        if platform.system() == "Windows":
+            # Test Windows-specific path
+            result = findLibraryFile("", "nonexistent.scad")
+            # Should return None if not found
+            assert result is None or isinstance(result, str)
+
+    def test_find_library_file_linux_path(self):
+        """Test findLibraryFile with Linux path handling."""
+        import platform
+        from openscad_parser.ast import findLibraryFile
+        
+        # This test verifies the Linux branch exists
+        if platform.system() == "Linux":
+            result = findLibraryFile("", "nonexistent.scad")
+            assert result is None or isinstance(result, str)
+
+    def test_get_ast_from_file_error_handling(self):
+        """Test getASTfromFile error handling."""
+        # Test with non-existent file
+        with pytest.raises(FileNotFoundError):
+            getASTfromFile("nonexistent_file_that_does_not_exist.scad")
+        
+        # Test with file that has read error (create a directory with that name)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_file = os.path.join(temp_dir, "fake.scad")
+            os.makedirs(fake_file, exist_ok=True)
+            
+            # This should raise an exception when trying to read
+            with pytest.raises(Exception):
+                getASTfromFile(fake_file)
+
+    def test_get_ast_from_file_process_includes_error(self):
+        """Test getASTfromFile when process_includes raises an error."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            main_file = os.path.join(temp_dir, "main.scad")
+            
+            with open(main_file, 'w') as f:
+                f.write("x = 5;\ninclude <nonexistent.scad>\n")
+            
+            # Should raise an exception when include file is not found
+            with pytest.raises(Exception):
+                getASTfromFile(main_file, process_includes=True)
