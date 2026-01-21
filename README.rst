@@ -18,6 +18,7 @@ Features
 - Source position tracking for all AST nodes
 - AST tree can contain comment nodes (single-line and multi-line)
 - AST tree uses dataclasses and can be pickled/unpickled for caching/serialization
+- JSON and YAML serialization/deserialization of AST trees
 
 Installation
 ------------
@@ -489,6 +490,65 @@ Main Functions
 
     This function removes all cached AST trees from memory.
 
+Serialization Functions
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``ast_to_dict(ast: ASTNode | list[ASTNode] | None, include_position: bool = True)``
+    Convert an AST to a Python dictionary (JSON-serializable).
+
+    :param ast: An AST node, list of AST nodes, or None
+    :param include_position: If True, include source position information (default: True)
+    :returns: A dictionary representation of the AST, a list of dictionaries, or None
+    :rtype: dict[str, Any] | list[dict[str, Any]] | None
+
+``ast_to_json(ast: ASTNode | list[ASTNode] | None, include_position: bool = True, indent: int | None = 2)``
+    Serialize an AST to a JSON string.
+
+    :param ast: An AST node, list of AST nodes, or None
+    :param include_position: If True, include source position information (default: True)
+    :param indent: Indentation level for pretty-printing. Use None for compact output (default: 2)
+    :returns: A JSON string representation of the AST
+    :rtype: str
+
+``ast_from_dict(data: dict[str, Any] | list[dict[str, Any]] | None)``
+    Reconstruct an AST from a Python dictionary.
+
+    :param data: A dictionary, list of dictionaries, or None (as returned by ast_to_dict)
+    :returns: An AST node, list of AST nodes, or None
+    :rtype: ASTNode | list[ASTNode] | None
+    :raises ValueError: If the data contains an unknown node type or is malformed
+
+``ast_from_json(json_str: str)``
+    Deserialize an AST from a JSON string.
+
+    :param json_str: A JSON string (as returned by ast_to_json)
+    :returns: An AST node, list of AST nodes, or None
+    :rtype: ASTNode | list[ASTNode] | None
+    :raises ValueError: If the JSON contains an unknown node type or is malformed
+    :raises json.JSONDecodeError: If the string is not valid JSON
+
+``ast_to_yaml(ast: ASTNode | list[ASTNode] | None, include_position: bool = True)``
+    Serialize an AST to a YAML string.
+
+    Requires PyYAML to be installed: ``pip install openscad_parser[yaml]``
+
+    :param ast: An AST node, list of AST nodes, or None
+    :param include_position: If True, include source position information (default: True)
+    :returns: A YAML string representation of the AST
+    :rtype: str
+    :raises ImportError: If PyYAML is not installed
+
+``ast_from_yaml(yaml_str: str)``
+    Deserialize an AST from a YAML string.
+
+    Requires PyYAML to be installed: ``pip install openscad_parser[yaml]``
+
+    :param yaml_str: A YAML string (as returned by ast_to_yaml)
+    :returns: An AST node, list of AST nodes, or None
+    :rtype: ASTNode | list[ASTNode] | None
+    :raises ImportError: If PyYAML is not installed
+    :raises ValueError: If the YAML contains an unknown node type or is malformed
+
 AST Node Classes
 ~~~~~~~~~~~~~~~~
 
@@ -544,6 +604,88 @@ All AST nodes include source position information::
     print(position.position)  # 0 (0-indexed character position)
 
 The ``Position`` class provides lazy evaluation of line/column numbers from character positions.
+
+Serialization
+-------------
+
+AST trees can be serialized to JSON or YAML formats and deserialized back to AST nodes. This is useful for caching, storage, or transferring AST data between processes.
+
+JSON Serialization
+~~~~~~~~~~~~~~~~~~
+
+Serialize an AST to JSON::
+
+    from openscad_parser.ast import getASTfromString, ast_to_json, ast_from_json
+
+    # Parse code to AST
+    ast = getASTfromString("cube(10);")
+
+    # Serialize to JSON string
+    json_str = ast_to_json(ast, include_position=True, indent=2)
+
+    # Deserialize back to AST
+    ast_restored = ast_from_json(json_str)
+
+The ``ast_to_json()`` function accepts:
+- ``ast``: An AST node, list of AST nodes, or None
+- ``include_position``: If True, include source position information (default: True)
+- ``indent``: Indentation level for pretty-printing. Use None for compact output (default: 2)
+
+Dictionary Serialization
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can also work with Python dictionaries directly::
+
+    from openscad_parser.ast import getASTfromString, ast_to_dict, ast_from_dict
+
+    ast = getASTfromString("x = 42;")
+
+    # Convert to dictionary
+    data = ast_to_dict(ast, include_position=True)
+
+    # Convert back to AST
+    ast_restored = ast_from_dict(data)
+
+YAML Serialization
+~~~~~~~~~~~~~~~~~~
+
+For YAML serialization, you need to install PyYAML::
+
+    pip install openscad_parser[yaml]
+
+Then serialize to YAML::
+
+    from openscad_parser.ast import getASTfromString, ast_to_yaml, ast_from_yaml
+
+    ast = getASTfromString("cube(10);")
+
+    # Serialize to YAML string
+    yaml_str = ast_to_yaml(ast, include_position=True)
+
+    # Deserialize back to AST
+    ast_restored = ast_from_yaml(yaml_str)
+
+The ``ast_to_yaml()`` function accepts:
+- ``ast``: An AST node, list of AST nodes, or None
+- ``include_position``: If True, include source position information (default: True)
+
+Serialization Functions
+~~~~~~~~~~~~~~~~~~~~~~~
+
+All serialization functions are available from ``openscad_parser.ast.serialization``::
+
+    from openscad_parser.ast.serialization import (
+        ast_to_dict,
+        ast_to_json,
+        ast_to_yaml,
+        ast_from_dict,
+        ast_from_json,
+        ast_from_yaml,
+    )
+
+They can also be imported directly from ``openscad_parser.ast``::
+
+    from openscad_parser.ast import ast_to_json, ast_from_json
 
 Error Handling
 --------------

@@ -84,6 +84,16 @@ from .nodes import (
 # Import ASTBuilderVisitor and Position
 from .builder import ASTBuilderVisitor, Position
 
+# Import serialization functions
+from .serialization import (
+    ast_to_dict,
+    ast_to_json,
+    ast_from_dict,
+    ast_from_json,
+    ast_to_yaml,
+    ast_from_yaml,
+)
+
 
 # --- AST convenience functions ---
 
