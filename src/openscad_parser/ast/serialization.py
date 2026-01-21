@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from .builder import Position
@@ -220,7 +221,7 @@ def _serialize_node(node: ASTNode, include_position: bool) -> dict[str, Any]:
 
 
 def ast_to_dict(
-    ast: ASTNode | list[ASTNode] | None,
+    ast: ASTNode | Sequence[ASTNode] | None,
     include_position: bool = True,
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
     """Convert an AST to a Python dictionary (JSON-serializable).
@@ -238,14 +239,16 @@ def ast_to_dict(
     """
     if ast is None:
         return None
-    elif isinstance(ast, list):
+    elif isinstance(ast, Sequence) and not isinstance(ast, str):
         return [_serialize_node(node, include_position) for node in ast]
-    else:
+    elif isinstance(ast, ASTNode):
         return _serialize_node(ast, include_position)
+    else:
+        raise TypeError(f"Expected ASTNode, Sequence[ASTNode], or None, got {type(ast)}")
 
 
 def ast_to_json(
-    ast: ASTNode | list[ASTNode] | None,
+    ast: ASTNode | Sequence[ASTNode] | None,
     include_position: bool = True,
     indent: int | None = 2,
 ) -> str:
@@ -368,7 +371,7 @@ def ast_from_json(json_str: str) -> ASTNode | list[ASTNode] | None:
 
 
 def ast_to_yaml(
-    ast: ASTNode | list[ASTNode] | None,
+    ast: ASTNode | Sequence[ASTNode] | None,
     include_position: bool = True,
 ) -> str:
     """Serialize an AST to a YAML string.

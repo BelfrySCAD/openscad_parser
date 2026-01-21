@@ -47,8 +47,12 @@ class TestAstToDict:
         node = NumberLiteral(val=42.0, position=_pos())
         result = ast_to_dict(node)
 
+        assert isinstance(result, dict)
         assert result["_type"] == "NumberLiteral"
         assert result["val"] == 42.0
+        assert result["_position"]["origin"] == "<test>"
+        assert result["_position"]["line"] == 1  
+        assert result["_position"]["column"] == 1
         assert result["_position"]["origin"] == "<test>"
         assert result["_position"]["line"] == 1
         assert result["_position"]["column"] == 1
@@ -71,9 +75,10 @@ class TestAstToDict:
         node = NumberLiteral(val=42.0, position=_pos())
         result = ast_to_dict(node, include_position=False)
 
-        assert "_type" in result
-        assert "_position" not in result
+        assert isinstance(result, dict)
+        assert result["_type"] == "NumberLiteral"
         assert result["val"] == 42.0
+        assert "_position" not in result
 
     def test_nested_nodes(self):
         """Test serializing nested node structures."""
@@ -83,11 +88,15 @@ class TestAstToDict:
 
         result = ast_to_dict(add_op)
 
+        assert isinstance(result, dict)
         assert result["_type"] == "AdditionOp"
         assert result["left"]["_type"] == "NumberLiteral"
         assert result["left"]["val"] == 1.0
         assert result["right"]["_type"] == "NumberLiteral"
         assert result["right"]["val"] == 2.0
+        assert result["_position"]["origin"] == "<test>"
+        assert result["_position"]["line"] == 1
+        assert result["_position"]["column"] == 1
 
     def test_node_with_list_field(self):
         """Test serializing node with list fields."""
@@ -100,6 +109,7 @@ class TestAstToDict:
 
         result = ast_to_dict(call)
 
+        assert isinstance(result, dict)
         assert result["_type"] == "ModularCall"
         assert result["name"]["_type"] == "Identifier"
         assert result["name"]["name"] == "cube"
@@ -167,8 +177,16 @@ class TestAstFromDict:
 
         assert isinstance(nodes, list)
         assert len(nodes) == 2
+        assert isinstance(nodes[0], NumberLiteral)
         assert nodes[0].val == 1.0
+        assert isinstance(nodes[1], NumberLiteral)
         assert nodes[1].val == 2.0
+        assert nodes[0].position.origin == "<test>"
+        assert nodes[0].position.line == 1
+        assert nodes[0].position.column == 1
+        assert nodes[1].position.origin == "<test>"
+        assert nodes[1].position.line == 1
+        assert nodes[1].position.column == 1
 
     def test_without_position(self):
         """Test deserializing without position (uses default)."""
@@ -247,8 +265,9 @@ class TestJsonRoundTrip:
 
             assert type(restored) == type(node)
             if hasattr(node, "val"):
-                assert restored.val == node.val
+                assert restored.val == node.val  # type: ignore
             if hasattr(node, "name"):
+                assert isinstance(restored, Identifier)
                 assert restored.name == node.name
 
     def test_roundtrip_expression(self):
@@ -388,7 +407,7 @@ class TestYamlImportError:
 
         # Remove yaml from sys.modules if present
         yaml_backup = sys.modules.get("yaml")
-        sys.modules["yaml"] = None
+        sys.modules["yaml"] = None  # type: ignore
 
         # Need to reload the serialization module to trigger the import
         import importlib
