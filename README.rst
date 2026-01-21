@@ -493,18 +493,18 @@ Main Functions
 Serialization Functions
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-``ast_to_dict(ast: ASTNode | list[ASTNode] | None, include_position: bool = True)``
+``ast_to_dict(ast: ASTNode | Sequence[ASTNode] | None, include_position: bool = True)``
     Convert an AST to a Python dictionary (JSON-serializable).
 
-    :param ast: An AST node, list of AST nodes, or None
+    :param ast: An AST node, sequence of AST nodes, or None
     :param include_position: If True, include source position information (default: True)
     :returns: A dictionary representation of the AST, a list of dictionaries, or None
     :rtype: dict[str, Any] | list[dict[str, Any]] | None
 
-``ast_to_json(ast: ASTNode | list[ASTNode] | None, include_position: bool = True, indent: int | None = 2)``
+``ast_to_json(ast: ASTNode | Sequence[ASTNode] | None, include_position: bool = True, indent: int | None = 2)``
     Serialize an AST to a JSON string.
 
-    :param ast: An AST node, list of AST nodes, or None
+    :param ast: An AST node, sequence of AST nodes, or None
     :param include_position: If True, include source position information (default: True)
     :param indent: Indentation level for pretty-printing. Use None for compact output (default: 2)
     :returns: A JSON string representation of the AST
@@ -527,12 +527,12 @@ Serialization Functions
     :raises ValueError: If the JSON contains an unknown node type or is malformed
     :raises json.JSONDecodeError: If the string is not valid JSON
 
-``ast_to_yaml(ast: ASTNode | list[ASTNode] | None, include_position: bool = True)``
+``ast_to_yaml(ast: ASTNode | Sequence[ASTNode] | None, include_position: bool = True)``
     Serialize an AST to a YAML string.
 
     Requires PyYAML to be installed: ``pip install openscad_parser[yaml]``
 
-    :param ast: An AST node, list of AST nodes, or None
+    :param ast: An AST node, sequence of AST nodes, or None
     :param include_position: If True, include source position information (default: True)
     :returns: A YAML string representation of the AST
     :rtype: str
@@ -627,7 +627,7 @@ Serialize an AST to JSON::
     ast_restored = ast_from_json(json_str)
 
 The ``ast_to_json()`` function accepts:
-- ``ast``: An AST node, list of AST nodes, or None
+- ``ast``: An AST node, sequence of AST nodes, or None
 - ``include_position``: If True, include source position information (default: True)
 - ``indent``: Indentation level for pretty-printing. Use None for compact output (default: 2)
 
@@ -666,13 +666,24 @@ Then serialize to YAML::
     ast_restored = ast_from_yaml(yaml_str)
 
 The ``ast_to_yaml()`` function accepts:
-- ``ast``: An AST node, list of AST nodes, or None
+- ``ast``: An AST node, sequence of AST nodes, or None
 - ``include_position``: If True, include source position information (default: True)
 
 Serialization Functions
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-All serialization functions are available from ``openscad_parser.ast.serialization``::
+All serialization functions can be imported directly from ``openscad_parser.ast`` (recommended)::
+
+    from openscad_parser.ast import (
+        ast_to_dict,
+        ast_to_json,
+        ast_to_yaml,
+        ast_from_dict,
+        ast_from_json,
+        ast_from_yaml,
+    )
+
+They are also available from ``openscad_parser.ast.serialization``::
 
     from openscad_parser.ast.serialization import (
         ast_to_dict,
@@ -682,10 +693,6 @@ All serialization functions are available from ``openscad_parser.ast.serializati
         ast_from_json,
         ast_from_yaml,
     )
-
-They can also be imported directly from ``openscad_parser.ast``::
-
-    from openscad_parser.ast import ast_to_json, ast_from_json
 
 Error Handling
 --------------

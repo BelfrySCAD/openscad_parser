@@ -15,6 +15,12 @@ The test suite is organized into the following modules:
 - **test_vectors.py**: Tests for vectors, ranges, and list comprehensions
 - **test_assignments.py**: Tests for assignments and statements
 - **test_complex.py**: Tests for complex scenarios, edge cases, and real-world examples
+- **test_ast_generation.py**: Tests for AST generation from parse trees
+- **test_ast_convenience.py**: Tests for convenience functions (getASTfromString, getASTfromFile, etc.)
+- **test_builder.py**: Tests for the AST builder functionality
+- **test_nodes.py**: Tests for AST node types and their properties
+- **test_serialization.py**: Tests for JSON and YAML serialization/deserialization of AST trees
+- **test_source_map.py**: Tests for source position tracking and source maps
 
 ## Running the Tests
 
@@ -98,6 +104,9 @@ The test suite aims to cover:
 - ✅ All control structures
 - ✅ Expression parsing and operator precedence
 - ✅ Vectors and list comprehensions
+- ✅ AST generation and node types
+- ✅ AST serialization (JSON and YAML)
+- ✅ Source position tracking
 - ✅ Edge cases and complex scenarios
 - ✅ Real-world OpenSCAD code examples
 
