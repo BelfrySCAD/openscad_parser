@@ -14,7 +14,7 @@ maintainers = [
   { name="Revar Desmera", email="revarbat@gmail.com" },
 ]
 license = "MIT"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
