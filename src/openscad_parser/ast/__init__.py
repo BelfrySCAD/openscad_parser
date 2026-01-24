@@ -84,6 +84,9 @@ from .nodes import (
 # Import ASTBuilderVisitor and Position
 from .builder import ASTBuilderVisitor, Position
 
+# Import scope classes
+from .scope import Scope, ScopeBuilder, build_scopes
+
 # Import serialization functions
 from .serialization import (
     ast_to_dict,

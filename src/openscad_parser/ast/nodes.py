@@ -11,12 +11,15 @@ if TYPE_CHECKING:
 @dataclass
 class ASTNode(object):
     """Base class for all AST nodes.
-    
+
     All AST nodes in the OpenSCAD parser inherit from this class. It provides
     a common interface for source position tracking and string representation.
-    
+
     Attributes:
         position: The source position of this node in the original OpenSCAD code.
+        scope: The lexical scope at this node's location, populated by ScopeBuilder.
+            This attribute is set dynamically after AST construction and may be None
+            if ScopeBuilder has not been run. Access via node.scope.
     """
     position: "Position"
 
