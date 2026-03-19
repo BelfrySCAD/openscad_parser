@@ -475,14 +475,16 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # Flatten nested statement lists. Include all statements (assignments,
         # function/module declarations, module instantiations) so scope build
         # can hoist declarations and attach scopes to every node.
+        # Filter out None values that may result from visit_statement() returning
+        # None for statement nodes with no children.
         flattened = []
         stack = list(statement)
         while stack:
             item = stack.pop(0)
             if isinstance(item, list):
                 stack = item + stack
-                continue
-            flattened.append(item)
+            elif item is not None:
+                flattened.append(item)
         return ModuleDeclaration(name=name, parameters=parameters, children=flattened, position=self._get_node_position(node))
 
     def visit_function_definition(self, node, children):

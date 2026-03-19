@@ -368,6 +368,11 @@ class Assignment(ASTNode):
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         self.name.build_scope(parent_scope)
+        # Function literal bodies are closures that resolve variables lazily at
+        # call time, so the RHS always uses parent_scope (the full scope including
+        # the variable being assigned). This correctly handles recursive function
+        # literals and expressions containing function literals
+        # (e.g. `a = b ? function(x,n) a(...) : function(x,n) a(...)`).
         self.expr.build_scope(parent_scope)
 
 
