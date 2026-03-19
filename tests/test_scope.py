@@ -498,6 +498,21 @@ class TestFunctionLiteralRecursion:
         fl = pc.left  # type: ignore
         assert fl.body.scope.lookup_variable("a") is not None  # type: ignore
 
+    def test_function_literal_in_ternary_rhs_sees_assigned_variable(self):
+        """Function literals in a ternary RHS should see the variable being assigned."""
+        ast = getASTfromString("a = b ? function(x, n) a(x + n, n - 1) : function(x, n) a(x * n, n - 1);")
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        assignment = ast[0]
+        ternary = assignment.expr  # type: ignore
+        true_fl = ternary.true_expr  # type: ignore
+        false_fl = ternary.false_expr  # type: ignore
+        assert isinstance(true_fl, FunctionLiteral)
+        assert isinstance(false_fl, FunctionLiteral)
+        # Both function bodies should see 'a' for recursion
+        assert true_fl.body.scope.lookup_variable("a") is not None  # type: ignore
+        assert false_fl.body.scope.lookup_variable("a") is not None  # type: ignore
+
 
 class TestModularCallChildren:
     """Test that module call children get their own scope."""

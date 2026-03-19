@@ -366,23 +366,14 @@ class Assignment(ASTNode):
         return f"{self.name} = {self.expr}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
-        from .scope import Scope as _Scope
         self.scope = parent_scope
         self.name.build_scope(parent_scope)
-        # The RHS expression must not see the variable being defined, EXCEPT
-        # when the RHS is a FunctionLiteral (to allow recursive function literals).
-        # If this assignment has been hoisted into parent_scope, create a
-        # pre-assignment scope that excludes this binding so the outer binding
-        # (if any) is resolved instead.
-        var_name = self.name.name
-        if parent_scope.variables.get(var_name) is self and not isinstance(self.expr, FunctionLiteral):
-            pre_scope = _Scope(parent=parent_scope.parent)
-            pre_scope.variables = {k: v for k, v in parent_scope.variables.items() if k != var_name}
-            pre_scope.functions = dict(parent_scope.functions)
-            pre_scope.modules = dict(parent_scope.modules)
-            self.expr.build_scope(pre_scope)
-        else:
-            self.expr.build_scope(parent_scope)
+        # Function literal bodies are closures that resolve variables lazily at
+        # call time, so the RHS always uses parent_scope (the full scope including
+        # the variable being assigned). This correctly handles recursive function
+        # literals and expressions containing function literals
+        # (e.g. `a = b ? function(x,n) a(...) : function(x,n) a(...)`).
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
