@@ -1,9 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .builder import Position
+    from .scope import Scope
 
 
 # --- AST nodes classes. ---
@@ -17,15 +18,20 @@ class ASTNode(object):
 
     Attributes:
         position: The source position of this node in the original OpenSCAD code.
-        scope: The lexical scope at this node's location, populated by ScopeBuilder.
+        scope: The lexical scope at this node's location, populated by build_scope().
             This attribute is set dynamically after AST construction and may be None
-            if ScopeBuilder has not been run. Access via node.scope.
+            if build_scope() has not been called. Access via node.scope.
     """
     position: "Position"
+    scope: "Scope | None" = field(default=None, kw_only=True)
 
     def __str__(self) -> str:
         """Return a string representation of the AST node."""
         raise NotImplementedError
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        """Assign parent_scope to this node. Leaf nodes use this default."""
+        self.scope = parent_scope
 
 
 @dataclass
@@ -227,7 +233,15 @@ class ParameterDeclaration(ASTNode):
 
     def __str__(self):
         return f"{self.name}{f' = {self.default}' if self.default else '' }"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        if self.default:
+            # Default is evaluated in the caller scope (parent of parameter scope)
+            caller_scope = parent_scope.parent if parent_scope.parent else parent_scope
+            self.default.build_scope(caller_scope)
+
 
 @dataclass
 class Argument(ASTNode):
@@ -263,6 +277,10 @@ class PositionalArgument(Argument):
     def __str__(self):
         return f"{self.expr}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.expr.build_scope(parent_scope)
+
 
 @dataclass
 class NamedArgument(Argument):
@@ -285,6 +303,11 @@ class NamedArgument(Argument):
 
     def __str__(self):
         return f"{self.name}={self.expr}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -312,6 +335,12 @@ class RangeLiteral(Primary):
     def __str__(self):
         return f"{self.start}:{self.end}:{self.step}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.start.build_scope(parent_scope)
+        self.end.build_scope(parent_scope)
+        self.step.build_scope(parent_scope)
+
 
 @dataclass
 class Assignment(ASTNode):
@@ -336,6 +365,11 @@ class Assignment(ASTNode):
     def __str__(self):
         return f"{self.name} = {self.expr}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        self.expr.build_scope(parent_scope)
+
 
 @dataclass
 class LetOp(Expression):
@@ -359,6 +393,14 @@ class LetOp(Expression):
     def __str__(self):
         return f"let({', '.join(str(assignment) for assignment in self.assignments)}) {self.body}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        let_scope = parent_scope.child_scope()
+        for assignment in self.assignments:
+            let_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(let_scope)
+        self.body.build_scope(let_scope)
+
 
 @dataclass
 class EchoOp(Expression):
@@ -380,6 +422,12 @@ class EchoOp(Expression):
 
     def __str__(self):
         return f"echo({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        self.body.build_scope(parent_scope)
 
 
 @dataclass
@@ -403,6 +451,12 @@ class AssertOp(Expression):
     def __str__(self):
         return f"assert({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        self.body.build_scope(parent_scope)
+
 
 @dataclass
 class UnaryMinusOp(Expression):
@@ -422,6 +476,10 @@ class UnaryMinusOp(Expression):
 
     def __str__(self):
         return f"-{self.expr}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -446,6 +504,11 @@ class AdditionOp(Expression):
     def __str__(self):
         return f"{self.left} + {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class SubtractionOp(Expression):
@@ -468,6 +531,11 @@ class SubtractionOp(Expression):
 
     def __str__(self):
         return f"{self.left} - {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -492,6 +560,11 @@ class MultiplicationOp(Expression):
     def __str__(self):
         return f"{self.left} * {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class DivisionOp(Expression):
@@ -515,6 +588,11 @@ class DivisionOp(Expression):
     def __str__(self):
         return f"{self.left} / {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class ModuloOp(Expression):
@@ -536,6 +614,11 @@ class ModuloOp(Expression):
 
     def __str__(self):
         return f"{self.left} % {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -559,6 +642,11 @@ class ExponentOp(Expression):
     def __str__(self):
         return f"{self.left} ^ {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class BitwiseAndOp(Expression):
@@ -580,6 +668,11 @@ class BitwiseAndOp(Expression):
 
     def __str__(self):
         return f"{self.left} & {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -603,6 +696,11 @@ class BitwiseOrOp(Expression):
     def __str__(self):
         return f"{self.left} | {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class BitwiseNotOp(Expression):
@@ -621,6 +719,10 @@ class BitwiseNotOp(Expression):
 
     def __str__(self):
         return f"~{self.expr}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -644,6 +746,11 @@ class BitwiseShiftLeftOp(Expression):
     def __str__(self):
         return f"{self.left} << {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class BitwiseShiftRightOp(Expression):
@@ -665,6 +772,11 @@ class BitwiseShiftRightOp(Expression):
 
     def __str__(self):
         return f"{self.left} >> {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -689,6 +801,11 @@ class LogicalAndOp(Expression):
     def __str__(self):
         return f"{self.left} && {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class LogicalOrOp(Expression):
@@ -712,6 +829,11 @@ class LogicalOrOp(Expression):
     def __str__(self):
         return f"{self.left} || {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class LogicalNotOp(Expression):
@@ -732,6 +854,10 @@ class LogicalNotOp(Expression):
 
     def __str__(self):
         return f"!{self.expr}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -758,6 +884,12 @@ class TernaryOp(Expression):
     def __str__(self):
         return f"{self.condition} ? {self.true_expr} : {self.false_expr}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.condition.build_scope(parent_scope)
+        self.true_expr.build_scope(parent_scope)
+        self.false_expr.build_scope(parent_scope)
+
 
 @dataclass
 class EqualityOp(Expression):
@@ -779,6 +911,11 @@ class EqualityOp(Expression):
 
     def __str__(self):
         return f"{self.left} == {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -802,6 +939,11 @@ class InequalityOp(Expression):
     def __str__(self):
         return f"{self.left} != {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class GreaterThanOp(Expression):
@@ -823,6 +965,11 @@ class GreaterThanOp(Expression):
 
     def __str__(self):
         return f"{self.left} > {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -846,6 +993,11 @@ class GreaterThanOrEqualOp(Expression):
     def __str__(self):
         return f"{self.left} >= {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class LessThanOp(Expression):
@@ -867,6 +1019,11 @@ class LessThanOp(Expression):
 
     def __str__(self):
         return f"{self.left} < {self.right}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
 
 
 @dataclass
@@ -890,6 +1047,11 @@ class LessThanOrEqualOp(Expression):
     def __str__(self):
         return f"{self.left} <= {self.right}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.right.build_scope(parent_scope)
+
 
 @dataclass
 class FunctionLiteral(Expression):
@@ -911,6 +1073,19 @@ class FunctionLiteral(Expression):
 
     def __str__(self):
         return f"function({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        func_scope = parent_scope.child_scope()
+        # Normalize: builder may pass a single ParameterDeclaration for one-param literals
+        arguments = self.arguments
+        if not isinstance(arguments, (list, tuple)):
+            arguments = [arguments] if arguments is not None else []
+        for arg in arguments:
+            if isinstance(arg, ParameterDeclaration):
+                func_scope.define_variable(arg.name.name, arg)
+                arg.build_scope(func_scope)
+        self.body.build_scope(func_scope)
 
 
 @dataclass
@@ -936,6 +1111,12 @@ class PrimaryCall(Expression):
     def __str__(self):
         return f"{self.left}({', '.join(str(arg) for arg in self.arguments)})"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+
 
 @dataclass
 class PrimaryIndex(Expression):
@@ -959,6 +1140,11 @@ class PrimaryIndex(Expression):
     def __str__(self):
         return f"{self.left}[{self.index}]"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.index.build_scope(parent_scope)
+
 
 @dataclass
 class PrimaryMember(Expression):
@@ -980,7 +1166,12 @@ class PrimaryMember(Expression):
 
     def __str__(self):
         return f"{self.left}.{self.member}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.left.build_scope(parent_scope)
+        self.member.build_scope(parent_scope)
+
 
 @dataclass
 class VectorElement(ASTNode):
@@ -992,7 +1183,7 @@ class VectorElement(ASTNode):
     """
     def __str__(self):
         raise NotImplementedError
-        
+
 
 @dataclass
 class ListCompLet(VectorElement):
@@ -1013,7 +1204,19 @@ class ListCompLet(VectorElement):
 
     def __str__(self):
         return f"let ({self.assignments}) {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        let_scope = parent_scope.child_scope()
+        # Normalize: builder may pass a single Assignment for one-binding lets
+        assignments = self.assignments
+        if not isinstance(assignments, (list, tuple)):
+            assignments = [assignments] if assignments is not None else []
+        for assignment in assignments:
+            let_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(let_scope)
+        self.body.build_scope(let_scope)
+
 
 @dataclass
 class ListCompEach(VectorElement):
@@ -1033,7 +1236,11 @@ class ListCompEach(VectorElement):
 
     def __str__(self):
         return f"each {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.body.build_scope(parent_scope)
+
 
 @dataclass
 class ListCompFor(VectorElement):
@@ -1056,7 +1263,22 @@ class ListCompFor(VectorElement):
 
     def __str__(self):
         return f"for ({self.assignments}) {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        # Normalize: builder may pass a single Assignment for one-variable loops
+        assignments = self.assignments
+        if not isinstance(assignments, (list, tuple)):
+            assignments = [assignments] if assignments is not None else []
+        for assignment in assignments:
+            assignment.scope = for_scope
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.name.build_scope(for_scope)
+            # Loop range is evaluated in the enclosing scope
+            assignment.expr.build_scope(parent_scope)
+        self.body.build_scope(for_scope)
+
 
 @dataclass
 class ListCompCFor(VectorElement):
@@ -1082,7 +1304,25 @@ class ListCompCFor(VectorElement):
 
     def __str__(self):
         return f"for ({self.initial}; {self.condition}; {self.increment}) {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        # Normalize: builder may pass single Assignments
+        initial = self.initial
+        if not isinstance(initial, (list, tuple)):
+            initial = [initial] if initial is not None else []
+        increment = self.increment
+        if not isinstance(increment, (list, tuple)):
+            increment = [increment] if increment is not None else []
+        for assignment in initial:
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(for_scope)
+        self.condition.build_scope(for_scope)
+        for assignment in increment:
+            assignment.build_scope(for_scope)
+        self.body.build_scope(for_scope)
+
 
 @dataclass
 class ListCompIf(VectorElement):
@@ -1104,6 +1344,11 @@ class ListCompIf(VectorElement):
 
     def __str__(self):
         return f"if {self.condition} {self.true_expr}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.condition.build_scope(parent_scope)
+        self.true_expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -1129,6 +1374,12 @@ class ListCompIfElse(VectorElement):
     def __str__(self):
         return f"if {self.condition} {self.true_expr} else {self.false_expr}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.condition.build_scope(parent_scope)
+        self.true_expr.build_scope(parent_scope)
+        self.false_expr.build_scope(parent_scope)
+
 
 @dataclass
 class ListComprehension(Expression):
@@ -1150,7 +1401,12 @@ class ListComprehension(Expression):
     
     def __str__(self):
         return f"[{', '.join(str(element) for element in self.elements)}]"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for elem in self.elements:
+            elem.build_scope(parent_scope)
+
 
 @dataclass
 class ModuleInstantiation(ASTNode):
@@ -1186,7 +1442,18 @@ class ModularCall(ModuleInstantiation):
 
     def __str__(self):
         return f"{self.name}({', '.join(str(arg) for arg in self.arguments)})"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        if self.children:
+            children_scope = parent_scope.child_scope()
+            _collect_hoisted_declarations(self.children, children_scope)
+            for child in self.children:
+                child.build_scope(children_scope)
+
 
 @dataclass
 class ModularFor(ModuleInstantiation):
@@ -1208,7 +1475,21 @@ class ModularFor(ModuleInstantiation):
 
     def __str__(self):
         return f"for ({', '.join(str(assignment) for assignment in self.assignments)}) {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        for assignment in self.assignments:
+            assignment.scope = for_scope
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.name.build_scope(for_scope)
+            # Loop range is evaluated in the enclosing scope
+            assignment.expr.build_scope(parent_scope)
+        body = self.body if isinstance(self.body, list) else [self.body]
+        _collect_hoisted_declarations(body, for_scope)
+        for node in body:
+            node.build_scope(for_scope)
+
 
 @dataclass
 class ModularCFor(ModuleInstantiation):
@@ -1234,7 +1515,21 @@ class ModularCFor(ModuleInstantiation):
 
     def __str__(self):
         return f"for ({'; '.join(str(a) for a in self.initial)}; {self.condition}; {', '.join(str(a) for a in self.increment)}) {self.body}"
-    
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        for assignment in self.initial:
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(for_scope)
+        self.condition.build_scope(for_scope)
+        for assignment in self.increment:
+            assignment.build_scope(for_scope)
+        body = self.body if isinstance(self.body, list) else [self.body]
+        _collect_hoisted_declarations(body, for_scope)
+        for node in body:
+            node.build_scope(for_scope)
+
 
 @dataclass
 class ModularIntersectionFor(ModuleInstantiation):
@@ -1255,7 +1550,21 @@ class ModularIntersectionFor(ModuleInstantiation):
 
     def __str__(self):
         return f"intersection_for ({', '.join(str(assignment) for assignment in self.assignments)}) {self.body}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        for assignment in self.assignments:
+            assignment.scope = for_scope
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.name.build_scope(for_scope)
+            assignment.expr.build_scope(parent_scope)
+        body = self.body if isinstance(self.body, list) else [self.body]
+        _collect_hoisted_declarations(body, for_scope)
+        for node in body:
+            node.build_scope(for_scope)
+
+
 @dataclass
 class ModularIntersectionCFor(ModuleInstantiation):
     """Represents an intersection_for C-style loop module instantiation.
@@ -1287,6 +1596,20 @@ class ModularIntersectionCFor(ModuleInstantiation):
             f") {self.body}"
         )
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for_scope = parent_scope.child_scope()
+        for assignment in self.initial:
+            for_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(for_scope)
+        self.condition.build_scope(for_scope)
+        for assignment in self.increment:
+            assignment.build_scope(for_scope)
+        body = self.body if isinstance(self.body, list) else [self.body]
+        _collect_hoisted_declarations(body, for_scope)
+        for node in body:
+            node.build_scope(for_scope)
+
 
 @dataclass
 class ModularLet(ModuleInstantiation):
@@ -1310,7 +1633,17 @@ class ModularLet(ModuleInstantiation):
 
     def __str__(self):
         return f"let ({', '.join(str(assignment) for assignment in self.assignments)}) {', '.join(str(child) for child in self.children)}"
-        
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        let_scope = parent_scope.child_scope()
+        for assignment in self.assignments:
+            let_scope.define_variable(assignment.name.name, assignment)
+            assignment.build_scope(let_scope)
+        _collect_hoisted_declarations(self.children, let_scope)
+        for child in self.children:
+            child.build_scope(let_scope)
+
 
 @dataclass
 class ModularEcho(ModuleInstantiation):
@@ -1332,7 +1665,17 @@ class ModularEcho(ModuleInstantiation):
 
     def __str__(self):
         return f"echo({', '.join(str(arg) for arg in self.arguments)}) {', '.join(str(child) for child in self.children)}"
-    
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        if self.children:
+            children_scope = parent_scope.child_scope()
+            _collect_hoisted_declarations(self.children, children_scope)
+            for child in self.children:
+                child.build_scope(children_scope)
+
 
 @dataclass
 class ModularAssert(ModuleInstantiation):
@@ -1354,7 +1697,17 @@ class ModularAssert(ModuleInstantiation):
 
     def __str__(self):
         return f"assert({', '.join(str(arg) for arg in self.arguments)}) {', '.join(str(child) for child in self.children)}"
-    
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        if self.children:
+            children_scope = parent_scope.child_scope()
+            _collect_hoisted_declarations(self.children, children_scope)
+            for child in self.children:
+                child.build_scope(children_scope)
+
 
 @dataclass
 class ModularIf(ModuleInstantiation):
@@ -1376,6 +1729,15 @@ class ModularIf(ModuleInstantiation):
 
     def __str__(self):
         return f"if ({self.condition}) {self.true_branch}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.condition.build_scope(parent_scope)
+        true_scope = parent_scope.child_scope()
+        branch = self.true_branch if isinstance(self.true_branch, list) else [self.true_branch]
+        _collect_hoisted_declarations(branch, true_scope)
+        for node in branch:
+            node.build_scope(true_scope)
 
 
 @dataclass
@@ -1400,6 +1762,20 @@ class ModularIfElse(ModuleInstantiation):
     def __str__(self):
         return f"if ({self.condition}) {self.true_branch} else {self.false_branch}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.condition.build_scope(parent_scope)
+        true_scope = parent_scope.child_scope()
+        true_branch = self.true_branch if isinstance(self.true_branch, list) else [self.true_branch]
+        _collect_hoisted_declarations(true_branch, true_scope)
+        for node in true_branch:
+            node.build_scope(true_scope)
+        false_scope = parent_scope.child_scope()
+        false_branch = self.false_branch if isinstance(self.false_branch, list) else [self.false_branch]
+        _collect_hoisted_declarations(false_branch, false_scope)
+        for node in false_branch:
+            node.build_scope(false_scope)
+
 
 @dataclass
 class ModularModifierShowOnly(ModuleInstantiation):
@@ -1420,6 +1796,10 @@ class ModularModifierShowOnly(ModuleInstantiation):
     def __str__(self):
         return f"!{self.child}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.child.build_scope(parent_scope)
+
 @dataclass
 class ModularModifierHighlight(ModuleInstantiation):
     """Represents the '#' (highlight) module modifier.
@@ -1438,6 +1818,10 @@ class ModularModifierHighlight(ModuleInstantiation):
 
     def __str__(self):
         return f"#{self.child}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.child.build_scope(parent_scope)
 
 
 @dataclass
@@ -1460,6 +1844,10 @@ class ModularModifierBackground(ModuleInstantiation):
     def __str__(self):
         return f"%{self.child}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.child.build_scope(parent_scope)
+
 
 @dataclass
 class ModularModifierDisable(ModuleInstantiation):
@@ -1480,6 +1868,10 @@ class ModularModifierDisable(ModuleInstantiation):
     def __str__(self):
         return f"*{self.child}"
 
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.child.build_scope(parent_scope)
+
 
 @dataclass
 class ModuleDeclaration(ASTNode):
@@ -1497,16 +1889,28 @@ class ModuleDeclaration(ASTNode):
     Attributes:
         name: The module name as an Identifier.
         parameters: List of parameter declarations.
-        children: List of module instantiations in the module body.
+        children: List of statements in the module body (module instantiations,
+            assignments, function and module declarations) for scoping and hoisting.
     """
     name: Identifier
     parameters: list[ParameterDeclaration]
-    children: list[ModuleInstantiation]
+    children: list[ModuleInstantiation | Assignment | FunctionDeclaration | ModuleDeclaration]
 
     def __str__(self):
         params = ', '.join(str(param) for param in self.parameters)
         children = ', '.join(str(child) for child in self.children)
         return f"module {self.name}({params}) {{ {children} }}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        mod_scope = parent_scope.child_scope()
+        for param in self.parameters:
+            mod_scope.define_variable(param.name.name, param)
+            param.build_scope(mod_scope)
+        _collect_hoisted_declarations(self.children, mod_scope)
+        for child in self.children:
+            child.build_scope(mod_scope)
 
 
 @dataclass
@@ -1533,6 +1937,15 @@ class FunctionDeclaration(ASTNode):
     def __str__(self):
         params = ', '.join(str(param) for param in self.parameters)
         return f"function {self.name}({params}) = {self.expr};"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        self.name.build_scope(parent_scope)
+        func_scope = parent_scope.child_scope()
+        for param in self.parameters:
+            func_scope.define_variable(param.name.name, param)
+            param.build_scope(func_scope)
+        self.expr.build_scope(func_scope)
 
 
 @dataclass
@@ -1577,3 +1990,17 @@ class IncludeStatement(ASTNode):
         return f"include <{self.filepath.val}>"
 
 
+def _collect_hoisted_declarations(nodes, scope: "Scope") -> None:
+    """Scan a list of nodes and register assignments, functions, and modules in scope.
+
+    OpenSCAD hoists variable, function, and module declarations within block
+    scopes, making them visible to all sibling nodes regardless of textual
+    order. Call this before calling build_scope() on the same node list.
+    """
+    for node in nodes:
+        if isinstance(node, Assignment):
+            scope.define_variable(node.name.name, node)
+        elif isinstance(node, FunctionDeclaration):
+            scope.define_function(node.name.name, node)
+        elif isinstance(node, ModuleDeclaration):
+            scope.define_module(node.name.name, node)

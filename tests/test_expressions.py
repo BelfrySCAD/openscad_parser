@@ -326,5 +326,3 @@ class TestComplexExpressions:
         """Test complex expression with ternary."""
         code = "x = a > b ? c + d : e - f;"
         parse_success(parser, code)
-
-

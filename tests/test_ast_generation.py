@@ -1151,3 +1151,213 @@ class TestComplexASTNodes:
         assert isinstance(module, ModuleDeclaration)
         assert len(module.children) >= 2  # Should have cube and sphere calls
 
+
+def _expr(parser, code: str):
+    """Parse ``x = <code>;`` and return the RHS expression node."""
+    ast = parse_ast(parser, f"x = {code};")
+    assert ast is not None and len(ast) == 1
+    node = ast[0]
+    assert isinstance(node, Assignment)
+    return node.expr
+
+
+class TestLogicalNotAST:
+    """AST-level tests for the logical NOT operator (!)."""
+
+    def test_not_true(self, parser):
+        """! applied to boolean literal true."""
+        expr = _expr(parser, "!true")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, BooleanLiteral)
+        assert expr.expr.val is True
+
+    def test_not_false(self, parser):
+        """! applied to boolean literal false."""
+        expr = _expr(parser, "!false")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, BooleanLiteral)
+        assert expr.expr.val is False
+
+    def test_not_identifier(self, parser):
+        """! applied to a variable."""
+        expr = _expr(parser, "!a")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, Identifier)
+        assert expr.expr.name == "a"
+
+    def test_not_double(self, parser):
+        """!! is LogicalNotOp wrapping LogicalNotOp."""
+        expr = _expr(parser, "!!a")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, LogicalNotOp)
+        assert isinstance(expr.expr.expr, Identifier)
+
+    def test_not_equality(self, parser):
+        """! applied to a parenthesized equality expression."""
+        expr = _expr(parser, "!(a == b)")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, EqualityOp)
+
+    def test_not_inequality(self, parser):
+        """! applied to a parenthesized inequality expression."""
+        expr = _expr(parser, "!(a != b)")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, InequalityOp)
+
+    def test_not_comparison(self, parser):
+        """! applied to a parenthesized greater-than comparison."""
+        expr = _expr(parser, "!(a > 0)")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, GreaterThanOp)
+
+    def test_not_binds_tighter_than_logical_and(self, parser):
+        """!a && b is ((!a) && b), not !(a && b)."""
+        expr = _expr(parser, "!a && b")
+        assert isinstance(expr, LogicalAndOp)
+        assert isinstance(expr.left, LogicalNotOp)
+        assert expr.left.expr.name == "a"
+        assert isinstance(expr.right, Identifier)
+        assert expr.right.name == "b"
+
+    def test_not_both_sides_of_and(self, parser):
+        """!a && !b — both AND operands are negated."""
+        expr = _expr(parser, "!a && !b")
+        assert isinstance(expr, LogicalAndOp)
+        assert isinstance(expr.left, LogicalNotOp)
+        assert isinstance(expr.right, LogicalNotOp)
+
+    def test_not_binds_tighter_than_logical_or(self, parser):
+        """!a || b is ((!a) || b)."""
+        expr = _expr(parser, "!a || b")
+        assert isinstance(expr, LogicalOrOp)
+        assert isinstance(expr.left, LogicalNotOp)
+        assert isinstance(expr.right, Identifier)
+
+    def test_not_in_ternary_condition(self, parser):
+        """!a used as ternary condition."""
+        expr = _expr(parser, "!a ? 1 : 2")
+        assert isinstance(expr, TernaryOp)
+        assert isinstance(expr.condition, LogicalNotOp)
+
+    def test_not_in_ternary_branch(self, parser):
+        """!b in the true branch of a ternary."""
+        expr = _expr(parser, "a ? !b : c")
+        assert isinstance(expr, TernaryOp)
+        assert isinstance(expr.true_expr, LogicalNotOp)
+
+    def test_not_in_if_condition(self, parser):
+        """! used as a condition in an if statement."""
+        ast = parse_ast(parser, "if (!cond) cube();")
+        assert ast is not None and len(ast) == 1
+        node = ast[0]
+        assert isinstance(node, ModularIf)
+        assert isinstance(node.condition, LogicalNotOp)
+        assert isinstance(node.condition.expr, Identifier)
+        assert node.condition.expr.name == "cond"
+
+    def test_str_simple(self, parser):
+        """__str__ renders !true as !True."""
+        expr = _expr(parser, "!true")
+        assert str(expr) == "!True"
+
+    def test_str_double(self, parser):
+        """__str__ renders !!a as !!a."""
+        expr = _expr(parser, "!!a")
+        assert str(expr) == "!!a"
+
+
+class TestBitwiseNotAST:
+    """AST-level tests for the bitwise NOT operator (~)."""
+
+    def test_not_number(self, parser):
+        """~ applied to a number literal."""
+        expr = _expr(parser, "~5")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, NumberLiteral)
+        assert expr.expr.val == 5
+
+    def test_not_identifier(self, parser):
+        """~ applied to a variable."""
+        expr = _expr(parser, "~a")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, Identifier)
+        assert expr.expr.name == "a"
+
+    def test_not_double(self, parser):
+        """~~ is BitwiseNotOp wrapping BitwiseNotOp."""
+        expr = _expr(parser, "~~a")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, BitwiseNotOp)
+        assert isinstance(expr.expr.expr, Identifier)
+
+    def test_not_parenthesized_addition(self, parser):
+        """~ applied to a parenthesized addition."""
+        expr = _expr(parser, "~(a + b)")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, AdditionOp)
+
+    def test_not_parenthesized_shift(self, parser):
+        """~ applied to a parenthesized left-shift expression."""
+        expr = _expr(parser, "~(a << b)")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, BitwiseShiftLeftOp)
+
+    def test_not_binds_tighter_than_bitwise_and(self, parser):
+        """~a & b is ((~a) & b), not ~(a & b)."""
+        expr = _expr(parser, "~a & b")
+        assert isinstance(expr, BitwiseAndOp)
+        assert isinstance(expr.left, BitwiseNotOp)
+        assert expr.left.expr.name == "a"
+        assert isinstance(expr.right, Identifier)
+        assert expr.right.name == "b"
+
+    def test_not_both_sides_of_and(self, parser):
+        """~a & ~b — both AND operands are complemented."""
+        expr = _expr(parser, "~a & ~b")
+        assert isinstance(expr, BitwiseAndOp)
+        assert isinstance(expr.left, BitwiseNotOp)
+        assert isinstance(expr.right, BitwiseNotOp)
+
+    def test_not_binds_tighter_than_bitwise_or(self, parser):
+        """~a | b is ((~a) | b)."""
+        expr = _expr(parser, "~a | b")
+        assert isinstance(expr, BitwiseOrOp)
+        assert isinstance(expr.left, BitwiseNotOp)
+        assert isinstance(expr.right, Identifier)
+
+    def test_str_simple(self, parser):
+        """__str__ renders ~5 as ~5.0 (numbers are stored as floats)."""
+        expr = _expr(parser, "~5")
+        assert str(expr) == "~5.0"
+
+    def test_str_double(self, parser):
+        """__str__ renders ~~a as ~~a."""
+        expr = _expr(parser, "~~a")
+        assert str(expr) == "~~a"
+
+
+class TestMixedNotOperatorsAST:
+    """AST-level tests for combinations of ! and ~ in the same expression."""
+
+    def test_bitwise_not_of_logical_not(self, parser):
+        """~!a — BitwiseNotOp wrapping LogicalNotOp."""
+        expr = _expr(parser, "~!a")
+        assert isinstance(expr, BitwiseNotOp)
+        assert isinstance(expr.expr, LogicalNotOp)
+        assert isinstance(expr.expr.expr, Identifier)
+
+    def test_logical_not_of_bitwise_not(self, parser):
+        """!~a — LogicalNotOp wrapping BitwiseNotOp."""
+        expr = _expr(parser, "!~a")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, BitwiseNotOp)
+        assert isinstance(expr.expr.expr, Identifier)
+
+    def test_three_levels_of_nesting(self, parser):
+        """!~!a — three alternating levels of not operators."""
+        expr = _expr(parser, "!~!a")
+        assert isinstance(expr, LogicalNotOp)
+        assert isinstance(expr.expr, BitwiseNotOp)
+        assert isinstance(expr.expr.expr, LogicalNotOp)
+        assert isinstance(expr.expr.expr.expr, Identifier)
+
