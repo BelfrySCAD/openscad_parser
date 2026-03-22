@@ -210,9 +210,10 @@ def _serialize_node(node: ASTNode, include_position: bool) -> dict[str, Any]:
     if include_position:
         result["_position"] = _serialize_position(node.position)
 
-    # Get all fields from the dataclass (excluding 'position' which we handle specially)
+    # Get all fields from the dataclass (excluding 'position' which we handle specially,
+    # and 'scope' which is runtime metadata not suitable for serialization)
     for field in dataclasses.fields(node):
-        if field.name == "position":
+        if field.name in ("position", "scope"):
             continue
         value = getattr(node, field.name)
         result[field.name] = _serialize_value(value, include_position)
