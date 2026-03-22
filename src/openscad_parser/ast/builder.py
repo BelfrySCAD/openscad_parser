@@ -127,7 +127,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
         if visit_method:
             try:
                 result = visit_method(node, children)
-                print(f"\n#####################\n{visit_method_name=}\n{node=}\n{children=}\n{result=}\n")
                 return result
             except Exception as e:
                 # If visit method fails, return children or None
