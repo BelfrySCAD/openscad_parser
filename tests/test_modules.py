@@ -2,6 +2,7 @@
 
 import pytest
 from tests.conftest import parse_success
+from openscad_parser import getOpenSCADParser
 
 
 class TestModuleDefinition:
@@ -52,6 +53,12 @@ class TestModuleDefinition:
         code = "module outer() { module inner() {} }"
         parse_success(parser, code)
 
+    def test_module_with_comment(self, parser):
+        """Test module defined with comments"""
+        comment_parser = getOpenSCADParser(reduce_tree=False, include_comments=True)
+        code = "module test() {\nsphere(5);\n// comment\ncube(10);}"
+        parse_success(parser, code)
+        parse_success(comment_parser, code)
 
 class TestModuleInstantiation:
     """Test module instantiation parsing."""
