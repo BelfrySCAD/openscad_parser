@@ -331,7 +331,7 @@ def empty_statement():
 
 
 def statement_block():
-    return (TOK_BRACE, ZeroOrMore(statement), TOK_ENDBRACE)
+    return (TOK_BRACE, ZeroOrMore([statement, comment]), TOK_ENDBRACE)
 
 
 def module_definition():
