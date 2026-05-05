@@ -16,6 +16,12 @@ def parser_reduced():
     return getOpenSCADParser(reduce_tree=True)
 
 
+@pytest.fixture
+def parser_comments():
+    """Create a parser instance with comment inclusion enabled."""
+    return getOpenSCADParser(reduce_tree=False, include_comments=True)
+
+
 def parse_success(parser, code):
     """Helper function to parse code and assert success."""
     result = parser.parse(code)
