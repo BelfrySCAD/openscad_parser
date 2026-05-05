@@ -139,3 +139,4 @@ cython_debug/
 *.egg
 *.egg-info
 .pytest_cache/
+.vscode/settings.json
