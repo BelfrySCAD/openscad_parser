@@ -33,6 +33,7 @@ classifiers = [
 keywords = ["openscad", "openscad parser", "parser"]
 dependencies = [
     "arpeggio>=2.0.3",
+    "pytest-cov>=7.1.0",
 ]
 
 [project.optional-dependencies]
