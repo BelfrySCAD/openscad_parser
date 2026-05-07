@@ -135,7 +135,7 @@ wheels = [
 
 [[package]]
 name = "openscad-parser"
-version = "2.1.0"
+version = "2.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "arpeggio" },
@@ -145,6 +145,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "pytest-cov" },
 ]
 yaml = [
     { name = "pyyaml" },
@@ -154,7 +155,7 @@ yaml = [
 requires-dist = [
     { name = "arpeggio", specifier = ">=2.0.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
 ]
 provides-extras = ["dev", "yaml"]

@@ -3,7 +3,7 @@
 ## Overview
 
 **Project:** OpenSCAD Parser
-**Version:** 2.0.0
+**Version:** 2.2.0
 **Status:** Beta
 **License:** MIT
 
@@ -41,7 +41,7 @@ OpenSCAD is a popular programming language for creating parametric 3D CAD models
 | Support comments in AST for documentation tools | Medium |
 | Parse invalid code gracefully with useful errors | Medium |
 
-## Current Capabilities (v2.0.0)
+## Current Capabilities (v2.2.0)
 
 ### Language Support
 
@@ -63,7 +63,9 @@ Full parsing support for OpenSCAD language constructs:
 | Source Mapping | Track positions across multiple files (essential for includes) |
 | Caching | In-memory AST cache with modification time validation |
 | Library Resolution | Platform-aware search paths matching OpenSCAD behavior |
-| Comment Preservation | Optional inclusion of comments in AST |
+| Comment Preservation | Optional inclusion of comments in AST, including inside statement blocks |
+| AST Serialization | JSON and YAML export/import of full ASTs |
+| Scope Resolution | Lexical scope building with three separate namespaces (variables, functions, modules) |
 
 ### API Surface
 
@@ -76,6 +78,16 @@ from openscad_parser.ast import (
     findLibraryFile,       # Locate library files
     clear_ast_cache,       # Clear AST cache
 )
+
+# Serialization
+from openscad_parser.ast.serialization import (
+    ast_to_json, ast_from_json,
+    ast_to_yaml, ast_from_yaml,
+    ast_to_dict, ast_from_dict,
+)
+
+# Scope resolution
+from openscad_parser.ast.scope import Scope, build_scopes
 
 # Lower-level access
 from openscad_parser import getOpenSCADParser
@@ -117,6 +129,8 @@ from openscad_parser.ast import parse_ast
 | AST Nodes | `ast/nodes.py` | Dataclass definitions for all node types |
 | Builder | `ast/builder.py` | Visitor that converts parse tree to AST |
 | Source Map | `ast/source_map.py` | Tracks positions across multiple origins |
+| Scope | `ast/scope.py` | Lexical scope building across three namespaces |
+| Serialization | `ast/serialization.py` | JSON/YAML export and import of ASTs |
 | API | `ast/__init__.py` | Public convenience functions |
 
 ## Quality Attributes
@@ -149,10 +163,9 @@ The following are potential enhancements for contributors to consider:
 
 | Enhancement | Description | Rationale |
 |-------------|-------------|-----------|
-| **AST Serialization** | JSON/YAML export of AST | Enable language-agnostic tooling |
 | **Code Generation** | AST to OpenSCAD source | Enable refactoring tools, formatters |
 | **Error Recovery** | Parse partial/invalid code | Better IDE integration, real-time parsing |
-| **Semantic Analysis** | Type inference, scope resolution | Enable advanced linting, autocomplete |
+| **Type Inference** | Infer types from scope analysis | Enable advanced linting, autocomplete |
 
 ### Medium Value
 
@@ -186,7 +199,6 @@ For open source contributors, consider these indicators of project health:
 
 ### Good First Issues
 
-- Add JSON serialization for AST nodes
 - Create utility functions for common AST traversals
 - Improve error messages for parse failures
 - Add examples for common use cases

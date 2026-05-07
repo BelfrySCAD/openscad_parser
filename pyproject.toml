@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "openscad_parser"
-version = "2.1.0"
+version = "2.3.0"
 description = "A PEG parser to read OpenSCAD language source code, with optional AST tree generation."
 readme = "README.rst"
 authors = [
@@ -33,12 +33,12 @@ classifiers = [
 keywords = ["openscad", "openscad parser", "parser"]
 dependencies = [
     "arpeggio>=2.0.3",
-    "pytest-cov>=7.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-cov>=7.1.0",
 ]
 yaml = [
     "PyYAML>=6.0",
