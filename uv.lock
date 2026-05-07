@@ -135,10 +135,11 @@ wheels = [
 
 [[package]]
 name = "openscad-parser"
-version = "2.2.1"
+version = "2.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "arpeggio" },
+    { name = "pytest-cov" },
 ]
 
 [package.optional-dependencies]

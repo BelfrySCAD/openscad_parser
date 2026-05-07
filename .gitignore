@@ -138,5 +138,8 @@ cython_debug/
 .DS_Store
 *.egg
 *.egg-info
+
 .pytest_cache/
 .vscode/settings.json
+.claude/worktrees/
+
