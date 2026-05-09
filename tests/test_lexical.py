@@ -1,36 +1,149 @@
 """Tests for lexical elements: comments, strings, numbers, identifiers."""
 
+from arpeggio import ParserPython
 import pytest
+from openscad_parser import getOpenSCADParser
 from tests.conftest import parse_failure, parse_success
 
 
 class TestComments:
     """Test comment parsing."""
 
-    def test_single_line_comment(self, parser):
+    def test_single_line_comment(self, parser, parser_comments):
         """Test single-line comments."""
         code = "// This is a comment"
-        parse_success(parser, code)
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "// This is a comment | ")
 
-    def test_single_line_comment_with_code(self, parser):
+    def test_single_line_comment_with_code(self, parser, parser_comments):
         """Test single-line comment with code before it."""
         code = "x = 5; // comment"
-        parse_success(parser, code)
+        parse_success(parser, code, "x | = | 5 | ; | ")
+        parse_success(parser_comments, code, "x | = | 5 | ; | // comment | ")
 
-    def test_multi_line_comment(self, parser):
+    def test_multi_line_comment(self, parser, parser_comments):
         """Test multi-line comments."""
         code = "/* This is a\nmulti-line comment */"
-        parse_success(parser, code)
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "/* This is a\nmulti-line comment */ | ")
 
-    def test_multi_line_comment_single_line(self, parser):
+    def test_multi_line_comment_single_line(self, parser, parser_comments):
         """Test multi-line comment on single line."""
         code = "/* comment */"
-        parse_success(parser, code)
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "/* comment */ | ")
 
-    def test_comments_in_expressions(self, parser):
+    def test_comments_in_expressions(self, parser, parser_comments):
         """Test comments within expressions."""
         code = "x = 1 + /* comment */ 2;"
-        parse_success(parser, code)
+        parse_success(parser, code, "x | = | 1 | + | 2 | ; | ")
+        # parse_success(parser_comments, code) # Broken
+
+    def test_block_comment_followed_by_block_comment(self, parser, parser_comments):
+        """Test block comment followed by another block comment"""
+        code = "/* comment *//* another comment */"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "/* comment */ | /* another comment */ | ")
+
+    def test_block_comment_followed_by_inline_comment(self, parser, parser_comments):
+        """Test block comment followed by an inline comment"""
+        code = "/* comment */// another comment"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "/* comment */ | // another comment | ")
+
+    def test_inline_comment_with_nested_inline(self, parser, parser_comments):
+        """Test an inline comment with a nested inline gets parsed as just one comment"""
+        code = "// comment // the same comment"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "// comment // the same comment | ")
+
+    def test_inline_comment_with_nested_block_comment(self, parser, parser_comments):
+        """Test an inline comment with a nested block comment gets parsed as just one comment"""
+        code = "// comment /* the same comment */"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "// comment /* the same comment */ | ")
+
+    def test_inline_comment_with_nested_unclosed_block_comment(self, parser, parser_comments):
+        """Test an inline comment with a nested unclosed block comment gets parsed as just one comment"""
+        code = "// comment /* the same comment"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "// comment /* the same comment | ")
+
+    def test_block_comment_with_unclosed_nested_block_comment(self, parser, parser_comments):
+        """Test that a block comment with a nested unclosed block comment gets parsed as just one comment"""
+        code = "/* comment /* the same comment */"
+        parse_success(parser, code, "")
+        parse_success(parser_comments, code, "/* comment /* the same comment */ | ")
+
+    def test_block_comment_with_nested_block_comment(self, parser, parser_comments):
+        """Test that an invalid nested block comment with two close tokens fails to parse"""
+        code = "/* comment /* the same comment */*/"
+        parse_failure(parser, code)
+        parse_failure(parser_comments, code)
+
+
+    @pytest.mark.parametrize("i", list(range(40)))
+    def test_comments_everywhere(self, i, parser, parser_comments):
+        """Tests that comments in multiple possible lexical locations are parsed
+        correctly. Comments that can be parsed correctly using include_comments
+        are included in the `successfully_parsed_locations_when_include_comments_is_set`
+        variable. Every value not in this list does not parse correctly when
+        include_comments is set to true on the parser"""
+        successfully_parsed_locations_when_include_comments_is_set = {
+            # 16 should be valid but is not, unlike 25 which is in a similar
+            # but slightly different relativelocation, and possibly exactly like 24
+            0, 7, 8, 25, 26, 35, 36, 37, 38, 39,
+            # 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31, 32, 33, 34 # Broken
+        }
+
+        possible_comment_location_count = 40
+
+        # A simple OpenSCAD module with various types of calls, and various
+        # marked where comments could be added.
+        code_template = "\n".join([
+            "{0}module {1}test{2}({3}x,{4} y{5}) {6}{{{7}",
+            "    {8}translate{9}({10}[{11}0, {12}1, {13}2{14}]{15}){16} rotate{17}({18}[{19}3,{20} 4,{21} 5{22}]{23}){24} {{{25}",
+            "            {26}cube{27}({28}[{29}10, {30}11, {31}12{32}]{33}){34};{35}",
+            "        {36}}}{37}",
+            "{38}}}{39}",
+            ""
+        ])
+        # The associated arpeggio parse tree string to the OpenSCAD module with
+        # the same marked locations where comments could be added.
+        parse_tree_template = "{0}module | {1}test | {2}( | {3}x | , | {4}y | {5}) | {6}{{ | {7}{8}translate | {9}( | {10}[ | {11}0 | , | {12}1 | , | {13}2 | {14}] | {15}) | {16}rotate | {17}( | {18}[ | {19}3 | , | {20}4 | , | {21}5 | {22}] | {23}) | {24}{{ | {25}{26}cube | {27}( | {28}[ | {29}10 | , | {30}11 | , | {31}12 | {32}] | {33}) | {34}; | {35}{36}}} | {37}{38}}} | {39}"
+
+        empty_args = [''] * possible_comment_location_count
+        parse_tree = parse_tree_template.format(*empty_args)
+
+        # Test Block Comments
+        block_code_args = empty_args.copy()
+        block_code_args[i] = "/* Comment */"
+        block_code = code_template.format(*block_code_args)
+
+        block_tree_args = empty_args.copy()
+        block_tree_args[i] = "/* Comment */ | "
+        block_tree = parse_tree_template.format(*block_tree_args)
+
+        parse_success(parser, block_code, parse_tree)
+        if i in successfully_parsed_locations_when_include_comments_is_set:
+            parse_success(parser_comments, block_code, block_tree)
+        else:
+            parse_failure(parser_comments, block_code)
+
+        # Test Inline Comments
+        inline_code_args = empty_args.copy()
+        inline_code_args[i] = "// Comment\n"
+        inline_code = code_template.format(*inline_code_args)
+
+        inline_tree_args = empty_args.copy()
+        inline_tree_args[i] = "// Comment | "
+        inline_tree = parse_tree_template.format(*inline_tree_args)
+
+        parse_success(parser, inline_code, parse_tree)
+        if i in successfully_parsed_locations_when_include_comments_is_set:
+            parse_success(parser_comments, inline_code, inline_tree)
+        else:
+            parse_failure(parser_comments, inline_code)
 
 
 class TestStrings:
