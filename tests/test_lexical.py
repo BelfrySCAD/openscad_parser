@@ -90,10 +90,8 @@ class TestComments:
         variable. Every value not in this list does not parse correctly when
         include_comments is set to true on the parser"""
         successfully_parsed_locations_when_include_comments_is_set = {
-            # 16 should be valid but is not, unlike 25 which is in a similar
-            # but slightly different relativelocation, and possibly exactly like 24
-            0, 7, 8, 25, 26, 35, 36, 37, 38, 39,
-            # 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31, 32, 33, 34 # Broken
+            0, 7, 8, 16, 24, 25, 26, 34, 35, 36, 37, 38, 39,
+            # 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 30, 31, 32, 33 # Broken
         }
 
         possible_comment_location_count = 40
