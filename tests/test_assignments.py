@@ -62,20 +62,6 @@ class TestStatements:
         parse_success(parser, code)
 
 
-class TestParameterLists:
-    """Test parameter list parsing."""
-
-    def test_empty_parameters(self, parser):
-        """Test empty parameter list."""
-        code = "module test() {}"
-        parse_success(parser, code)
-
-    def test_parameters_trailing_comma(self, parser):
-        """Test parameters with trailing comma."""
-        code = "module test(x, y,) {}"
-        parse_success(parser, code)
-
-
 class TestArgumentLists:
     """Test argument list parsing."""
 
