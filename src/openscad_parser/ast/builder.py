@@ -1015,9 +1015,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return RangeLiteral(start=start, end=end, step=step, position=self._get_node_position(node))
     
     def visit_vector_expr(self, node, children):
-        elements = children[0] if children else []
-        if elements is None:  # pragma: no cover
-            elements = []
+        elements = children if children else []
         if not isinstance(elements, list):
             elements = [elements]
         return ListComprehension(elements=elements, position=self._get_node_position(node))
