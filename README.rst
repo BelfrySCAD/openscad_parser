@@ -193,7 +193,7 @@ All AST nodes inherit from ``ASTNode`` and have a ``position`` attribute for sou
 
     # Access source position
     print(assignment.position.line)      # Line number (1-indexed)
-    print(assignment.position.char)      # Column number (1-indexed)
+    print(assignment.position.column)    # Column number (1-indexed)
 
 Examples
 --------
@@ -370,7 +370,7 @@ List Comprehensions
 
 - ``ListComprehension``: Vector/list literals
 - ``ListCompFor``: for loops in list comprehensions
-- ``ListCompCStyleFor``: C-style for loops
+- ``ListCompCFor``: C-style for loops
 - ``ListCompIf``, ``ListCompIfElse``: Conditionals
 - ``ListCompLet``: let expressions
 - ``ListCompEach``: each expressions
@@ -380,8 +380,9 @@ Module Instantiations
 
 - ``ModularCall``: Module calls with arguments and children
 - ``ModularFor``: for loops
-- ``ModularCLikeFor``: C-style for loops
+- ``ModularCFor``: C-style for loops
 - ``ModularIntersectionFor``: intersection_for loops
+- ``ModularIntersectionCFor``: C-style intersection_for loops
 - ``ModularLet``: let statements
 - ``ModularEcho``: echo statements
 - ``ModularAssert``: assert statements
@@ -432,10 +433,12 @@ Main Functions
     :param debug: If True, enables debug output
     :returns: ParserPython instance
 
-``getASTfromString(code: str)``
+``getASTfromString(code: str, include_comments: bool = False, origin: str = "<string>")``
     Parse OpenSCAD code from a string and return its AST.
 
     :param code: The OpenSCAD source code to be parsed
+    :param include_comments: If True, include comment nodes in the AST (default: False)
+    :param origin: Origin identifier used in source position tracking (default: "<string>")
     :returns: AST node or list of AST nodes (for top-level statements)
     :rtype: ASTNode | list[ASTNode] | None
 
@@ -476,12 +479,13 @@ Main Functions
 
     **Note:** The ``process_includes`` parameter affects the AST structure (see ``getASTfromFile`` documentation).
 
-``parse_ast(parser, code, file="")``
+``parse_ast(parser, code, file="", source_map=None)``
     Parse OpenSCAD code and generate an AST (lower-level API).
 
     :param parser: Arpeggio parser instance from getOpenSCADParser()
     :param code: OpenSCAD code string to parse
     :param file: Optional file path for source location tracking
+    :param source_map: Optional ``SourceMap`` for multi-origin position tracking
     :returns: AST node or list of AST nodes (for top-level statements)
 
 ``clear_ast_cache()``
@@ -489,6 +493,21 @@ Main Functions
     ``getASTfromFile()`` to re-parse files.
 
     This function removes all cached AST trees from memory.
+
+``build_scopes(ast: list[ASTNode]) -> Scope``
+    Build a scope tree over an AST and attach a ``scope`` attribute to every node.
+
+    :param ast: A list of top-level AST nodes (as returned by the ``getAST*`` functions)
+    :returns: The root ``Scope`` object
+
+``Scope``
+    Represents a lexical scope with three independent namespaces (variables, functions,
+    modules), mirroring OpenSCAD's scoping rules.
+
+    - ``scope.lookup_variable(name)`` — search this scope and its parents
+    - ``scope.lookup_function(name)`` — search this scope and its parents
+    - ``scope.lookup_module(name)`` — search this scope and its parents
+    - ``scope.parent`` — the enclosing scope (``None`` for root)
 
 Serialization Functions
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -598,12 +617,15 @@ All AST nodes include source position information::
     assignment = ast[0]
 
     position = assignment.position
-    print(position.file)      # "example.scad"
-    print(position.line)      # 1 (1-indexed)
-    print(position.char)      # 1 (1-indexed, column number)
-    print(position.position)  # 0 (0-indexed character position)
+    print(position.origin)        # "example.scad" (origin identifier)
+    print(position.line)          # 1 (1-indexed line number)
+    print(position.column)        # 1 (1-indexed column number)
+    print(position.start_offset)  # 0 (0-based byte offset of token start within origin)
+    print(position.end_offset)    # N (0-based exclusive byte offset of token end)
 
-The ``Position`` class provides lazy evaluation of line/column numbers from character positions.
+The ``Position`` dataclass carries both line/column coordinates and byte offsets relative
+to the origin's content. For single-file parses these equal file byte offsets; for
+multi-origin parses (e.g. after include expansion) they are relative to each included file.
 
 Serialization
 -------------
@@ -787,12 +809,42 @@ The AST is a tree structure that can be traversed recursively::
     for node in ast:
         visit_node(node)
 
+Scope Tracking
+--------------
+
+The parser can build a scope tree over the AST, resolving variable, function, and module
+names according to OpenSCAD's three-namespace scoping rules::
+
+    from openscad_parser.ast import getASTfromString, build_scopes
+
+    ast = getASTfromString("""
+        x = 10;
+        module box(size = x) { cube(size); }
+        box();
+    """)
+
+    root_scope = build_scopes(ast)
+
+    # Look up names in the root scope
+    print(root_scope.lookup_variable("x"))   # Assignment node
+    print(root_scope.lookup_module("box"))   # ModuleDeclaration node
+
+    # Each AST node has a .scope attribute pointing to its enclosing scope
+    box_decl = ast[1]
+    cube_call = box_decl.children[0]
+    print(cube_call.scope.lookup_variable("size"))  # ParameterDeclaration node
+
+``build_scopes(ast)`` returns the root ``Scope`` object and attaches a ``scope`` attribute
+to every node in the tree. Scopes form a parent chain so lookups fall through to enclosing
+scopes automatically. Declarations (variables, functions, modules) inside a block are
+hoisted to the top of that block's scope before child nodes are visited.
+
 Testing
 -------
 
 The project includes a comprehensive test suite. Run tests with::
 
-    pytest tests/
+    uv run pytest tests/
 
 Development
 -----------
