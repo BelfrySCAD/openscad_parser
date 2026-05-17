@@ -180,13 +180,14 @@ def test_list_comprehension_str():
     assign = Assignment(name=_ident("i"), expr=_num(0.0), position=_pos())
     list_let = ListCompLet(assignments=[assign], body=_num(1.0), position=_pos())
     assert str(list_let).startswith("let (")
-    assert "Assignment" in str(list_let)
+    assert "i = 0.0" in str(list_let)
 
     list_each = ListCompEach(body=_num(2.0), position=_pos())
     assert str(list_each) == "each 2.0"
 
     list_for = ListCompFor(assignments=[assign], body=_num(3.0), position=_pos())
     assert str(list_for).startswith("for (")
+    assert "i = 0.0" in str(list_for)
 
     list_c_for = ListCompCFor(
         initial=[assign],
@@ -197,6 +198,7 @@ def test_list_comprehension_str():
     )
     assert str(list_c_for).startswith("for (")
     assert "; " in str(list_c_for)
+    assert "i = 0.0" in str(list_c_for)
 
     list_if = ListCompIf(condition=_num(1.0), true_expr=_num(5.0), position=_pos())
     assert str(list_if) == "if 1.0 5.0"

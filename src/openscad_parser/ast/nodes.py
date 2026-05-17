@@ -1208,7 +1208,7 @@ class ListCompLet(VectorElement):
     body: Expression
 
     def __str__(self):
-        return f"let ({self.assignments}) {self.body}"
+        return f"let ({', '.join(str(a) for a in self.assignments)}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1267,7 +1267,7 @@ class ListCompFor(VectorElement):
     body: VectorElement
 
     def __str__(self):
-        return f"for ({self.assignments}) {self.body}"
+        return f"for ({', '.join(str(a) for a in self.assignments)}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1308,7 +1308,7 @@ class ListCompCFor(VectorElement):
     body: VectorElement
 
     def __str__(self):
-        return f"for ({self.initial}; {self.condition}; {self.increment}) {self.body}"
+        return f"for ({', '.join(str(a) for a in self.initial)}; {self.condition}; {', '.join(str(a) for a in self.increment)}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
