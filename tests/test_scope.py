@@ -10,6 +10,14 @@ from openscad_parser.ast import (
     ModularModifierBackground, ModularModifierDisable,
     ListComprehension, ListCompFor, ListCompCFor, ListCompLet,
     ListCompIf, ListCompIfElse, ListCompEach,
+    ModularIntersectionFor, ModularIntersectionCFor,
+    EchoOp, AssertOp,
+    DivisionOp, ModuloOp, ExponentOp,
+    BitwiseAndOp, BitwiseOrOp, BitwiseNotOp,
+    BitwiseShiftLeftOp, BitwiseShiftRightOp,
+    LogicalAndOp, LogicalOrOp, LogicalNotOp,
+    InequalityOp, GreaterThanOrEqualOp, LessThanOrEqualOp,
+    PrimaryIndex, PrimaryMember,
 )
 
 
@@ -718,3 +726,206 @@ class TestListComprehensionScope:
         lc_each = comp.elements[0]
         assert isinstance(lc_each, ListCompEach)
         assert lc_each.body.scope is not None  # type: ignore
+
+
+class TestExpressionOpBuildScope:
+    """Tests that build_scope propagates through expression operator node types."""
+
+    def _parse_and_scope(self, code):
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        return ast
+
+    def test_echo_op_scope(self):
+        ast = self._parse_and_scope("x = echo(1) 2;")
+        echo_op = ast[0].expr  # type: ignore
+        assert isinstance(echo_op, EchoOp)
+        assert echo_op.body.scope is not None
+
+    def test_assert_op_scope(self):
+        ast = self._parse_and_scope("x = assert(true) 1;")
+        assert_op = ast[0].expr  # type: ignore
+        assert isinstance(assert_op, AssertOp)
+        assert assert_op.body.scope is not None
+
+    def test_division_op_scope(self):
+        ast = self._parse_and_scope("x = a / b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, DivisionOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_modulo_op_scope(self):
+        ast = self._parse_and_scope("x = a % b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, ModuloOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_exponent_op_scope(self):
+        ast = self._parse_and_scope("x = a ^ b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, ExponentOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_bitwise_and_op_scope(self):
+        ast = self._parse_and_scope("x = a & b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, BitwiseAndOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_bitwise_or_op_scope(self):
+        ast = self._parse_and_scope("x = a | b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, BitwiseOrOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_bitwise_not_op_scope(self):
+        ast = self._parse_and_scope("x = ~a;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, BitwiseNotOp)
+        assert op.expr.scope is not None
+
+    def test_bitwise_shift_left_op_scope(self):
+        ast = self._parse_and_scope("x = a << b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, BitwiseShiftLeftOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_bitwise_shift_right_op_scope(self):
+        ast = self._parse_and_scope("x = a >> b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, BitwiseShiftRightOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_logical_and_op_scope(self):
+        ast = self._parse_and_scope("x = a && b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, LogicalAndOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_logical_or_op_scope(self):
+        ast = self._parse_and_scope("x = a || b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, LogicalOrOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_logical_not_op_scope(self):
+        ast = self._parse_and_scope("x = !a;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, LogicalNotOp)
+        assert op.expr.scope is not None
+
+    def test_inequality_op_scope(self):
+        ast = self._parse_and_scope("x = a != b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, InequalityOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_greater_than_or_equal_op_scope(self):
+        ast = self._parse_and_scope("x = a >= b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, GreaterThanOrEqualOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_less_than_or_equal_op_scope(self):
+        ast = self._parse_and_scope("x = a <= b;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, LessThanOrEqualOp)
+        assert op.left.scope is not None
+        assert op.right.scope is not None
+
+    def test_primary_index_scope(self):
+        ast = self._parse_and_scope("x = arr[i];")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, PrimaryIndex)
+        assert op.left.scope is not None
+        assert op.index.scope is not None
+
+    def test_primary_member_scope(self):
+        ast = self._parse_and_scope("x = v.y;")
+        op = ast[0].expr  # type: ignore
+        assert isinstance(op, PrimaryMember)
+        assert op.left.scope is not None
+        assert op.member.scope is not None
+
+
+class TestIntersectionForBuildScope:
+    """Tests that ModularIntersectionFor and ModularIntersectionCFor propagate scope."""
+
+    def test_modular_intersection_for_scope(self):
+        ast = getASTfromString("intersection_for (i = [0:2]) cube(i);")
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        node = ast[0]
+        assert isinstance(node, ModularIntersectionFor)
+        body = node.body[0] if isinstance(node.body, list) else node.body
+        assert body.scope is not None
+        assert body.scope.lookup_variable("i") is not None
+
+    def test_modular_intersection_for_block_body(self):
+        ast = getASTfromString("intersection_for (i = [0:2]) { cube(i); sphere(i); }")
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        node = ast[0]
+        assert isinstance(node, ModularIntersectionFor)
+        body = node.body[0] if isinstance(node.body, list) else node.body
+        assert body.scope.lookup_variable("i") is not None
+
+    def test_modular_intersection_c_for_scope(self):
+        ast = getASTfromString("intersection_for (i = 0; i < 3; i = i + 1) cube(i);")
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        node = ast[0]
+        assert isinstance(node, ModularIntersectionCFor)
+        body = node.body[0] if isinstance(node.body, list) else node.body
+        assert body.scope is not None
+        assert body.scope.lookup_variable("i") is not None
+
+    def test_modular_intersection_c_for_block_body(self):
+        ast = getASTfromString("intersection_for (i = 0; i < 3; i = i + 1) { cube(i); sphere(i); }")
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        node = ast[0]
+        assert isinstance(node, ModularIntersectionCFor)
+        body = node.body[0] if isinstance(node.body, list) else node.body
+        assert body.scope.lookup_variable("i") is not None
+
+
+class TestHoistedModuleDeclaration:
+    """Tests that ModuleDeclaration nested inside a block is hoisted correctly."""
+
+    def test_nested_module_in_module_is_hoisted(self):
+        ast = getASTfromString("""
+            module outer() {
+                module inner() { cube(1); }
+                inner();
+            }
+        """)
+        assert ast is not None and isinstance(ast, list)
+        build_scopes(ast)
+        outer = ast[0]
+        assert isinstance(outer, ModuleDeclaration)
+        # inner() call should see inner module via hoisting
+        call = next(c for c in outer.children if isinstance(c, ModularCall))  # type: ignore
+        assert call.scope.lookup_module("inner") is not None
+
+    def test_nested_module_not_visible_in_outer_scope(self):
+        ast = getASTfromString("""
+            module outer() {
+                module inner() { cube(1); }
+            }
+        """)
+        assert ast is not None and isinstance(ast, list)
+        root = build_scopes(ast)
+        assert root.lookup_module("inner") is None

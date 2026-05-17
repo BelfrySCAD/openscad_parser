@@ -1,7 +1,10 @@
 """Tests for AST node string representations."""
 
+import pytest
 from openscad_parser.ast.builder import Position
 from openscad_parser.ast.nodes import (
+    ASTNode,
+    VectorElement,
     CommentLine,
     CommentSpan,
     Identifier,
@@ -254,3 +257,15 @@ def test_modular_and_declaration_str():
 
     include_stmt = IncludeStatement(filepath=StringLiteral(val="lib.scad", position=_pos()), position=_pos())
     assert str(include_stmt) == "include <lib.scad>"
+
+
+def test_astnode_str_raises_not_implemented():
+    node = ASTNode(position=_pos())
+    with pytest.raises(NotImplementedError):
+        str(node)
+
+
+def test_vector_element_str_raises_not_implemented():
+    node = VectorElement(position=_pos())
+    with pytest.raises(NotImplementedError):
+        str(node)
