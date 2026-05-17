@@ -2,6 +2,8 @@
 
 import pytest
 from tests.conftest import parse_success
+from openscad_parser.ast import getASTfromString
+from openscad_parser.ast.nodes import Assignment, ListComprehension, ListCompFor
 
 
 class TestVectors:
@@ -180,6 +182,17 @@ class TestListComprehensionComplex:
         """Test list comprehension with nested parentheses."""
         code = "x = [for (i = [0:5]) (for (j = [0:3]) i + j)];"
         parse_success(parser, code)
+
+    def test_listcomp_paren_expr_ast(self):
+        """Parenthesised listcomp element (listcomp_paren_expr) builds correct AST."""
+        ast = getASTfromString("x = [(for (i = [0:3]) i)];")
+        assert isinstance(ast, list) and len(ast) == 1
+        assign = ast[0]
+        assert isinstance(assign, Assignment)
+        comp = assign.expr
+        assert isinstance(comp, ListComprehension)
+        assert len(comp.elements) == 1
+        assert isinstance(comp.elements[0], ListCompFor)
 
 
 class TestVectorOperations:

@@ -972,9 +972,9 @@ class ASTBuilderVisitor(PTNodeVisitor):
             for op in reversed(ops):
                 if op == '-':
                     result = UnaryMinusOp(expr=result, position=self._get_node_position(node))
-                elif op == '!':
+                elif op == '!':  # pragma: no cover
                     result = LogicalNotOp(expr=result, position=self._get_node_position(node))
-                elif op == '~':
+                elif op == '~':  # pragma: no cover
                     result = BitwiseNotOp(expr=result, position=self._get_node_position(node))
         
         return result
@@ -1048,8 +1048,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
     
     def visit_vector_expr(self, node, children):
         elements = children if children else []
-        if not isinstance(elements, list):
-            elements = [elements]
         return ListComprehension(elements=elements, position=self._get_node_position(node))
     
     def visit_funclit_def(self, node, children):
@@ -1065,7 +1063,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return children[0]
 
     def visit_listcomp_paren_expr(self, node, children):
-        return children[0] if children else None
+        return children[0]
     
     def visit_listcomp_let(self, node, children):
         return ListCompLet(assignments=children[0], body=children[1], position=self._get_node_position(node))
@@ -1118,8 +1116,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
         mods = children.get_rule("child_statement") if hasattr(children, "get_rule") else (children[2] if len(children) > 2 else [])
         if mods is None:  # pragma: no cover
             mods = []
-        if not isinstance(mods, list):
-            mods = [mods]
         return ModularCall(
             name=name,
             arguments=arguments,
@@ -1131,8 +1127,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
         initial = children[0] if isinstance(children[0], list) else [children[0]]
         increment = children[2] if isinstance(children[2], list) else [children[2]]
         body = children.get_rule('child_statement')
-        if not isinstance(body, list):
-            body = [body]
         return ModularCFor(
             initial=initial,
             condition=children[1],
@@ -1144,8 +1138,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
     def visit_modular_for(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
         body = children.get_rule('child_statement')
-        if not isinstance(body, list):
-            body = [body]
         return ModularFor(
             assignments=assignments,
             body=body,
@@ -1156,8 +1148,6 @@ class ASTBuilderVisitor(PTNodeVisitor):
         initial = children[0] if isinstance(children[0], list) else [children[0]]
         increment = children[2] if isinstance(children[2], list) else [children[2]]
         body = children.get_rule('child_statement')
-        if not isinstance(body, list):
-            body = [body]
         return ModularIntersectionCFor(
             initial=initial,
             condition=children[1],
@@ -1169,46 +1159,32 @@ class ASTBuilderVisitor(PTNodeVisitor):
     def visit_modular_intersection_for(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
         body = children.get_rule('child_statement')
-        if not isinstance(body, list):
-            body = [body]
         return ModularIntersectionFor(assignments=assignments, body=body, position=self._get_node_position(node))
     
     def visit_modular_let(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
         mods = children.get_rule('child_statement')
-        if not isinstance(mods, list):
-            mods = [mods]
         return ModularLet(assignments=assignments, children=mods, position=self._get_node_position(node))
     
     def visit_modular_echo(self, node, children):
         arguments = children[0] if isinstance(children[0], list) else [children[0]]
         mods = children.get_rule('child_statement')
-        if not isinstance(mods, list):
-            mods = [mods]
         return ModularEcho(arguments=arguments, children=mods, position=self._get_node_position(node))
     
     def visit_modular_assert(self, node, children):
         arguments = children[0] if isinstance(children[0], list) else [children[0]]
         mods = children.get_rule('child_statement')
-        if not isinstance(mods, list):
-            mods = [mods]
         return ModularAssert(arguments=arguments, children=mods, position=self._get_node_position(node))
     
     def visit_if_statement(self, node, children):
         condition = children[0]
         true_branch = children.get_rule('child_statement')
-        if not isinstance(true_branch, list):
-            true_branch = [true_branch]
         return ModularIf(condition=condition, true_branch=true_branch, position=self._get_node_position(node))
 
     def visit_ifelse_statement(self, node, children):
         condition = children[0]
         true_branch = children.get_rule('child_statement')
         false_branch = children.get_rule('child_statement', index=1)
-        if not isinstance(true_branch, list):
-            true_branch = [true_branch]
-        if not isinstance(false_branch, list):
-            false_branch = [false_branch]
         return ModularIfElse(condition=condition, true_branch=true_branch, false_branch=false_branch, position=self._get_node_position(node))
     
     def visit_modifier_show_only(self, node, children):
