@@ -51,9 +51,6 @@ class TestAstToDict:
         assert result["_type"] == "NumberLiteral"
         assert result["val"] == 42.0
         assert result["_position"]["origin"] == "<test>"
-        assert result["_position"]["line"] == 1  
-        assert result["_position"]["column"] == 1
-        assert result["_position"]["origin"] == "<test>"
         assert result["_position"]["line"] == 1
         assert result["_position"]["column"] == 1
 

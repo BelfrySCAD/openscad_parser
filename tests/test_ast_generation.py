@@ -4,7 +4,6 @@ import pytest
 from openscad_parser import getOpenSCADParser
 from openscad_parser.ast import (
     ASTBuilderVisitor,
-    ASTBuilderVisitor,
     Identifier, StringLiteral, NumberLiteral, BooleanLiteral, UndefinedLiteral,
     RangeLiteral, CommentLine, CommentSpan,
     ParameterDeclaration, PositionalArgument, NamedArgument,

@@ -299,14 +299,12 @@ class TestFindLibraryFile:
         
         try:
             found = findLibraryFile(current_file, "utils/math.scad")
-            # Debug output
-            print("Expected lib_file:", lib_file)
-            print("Found file:      ", found)
             assert found == lib_file
         finally:
             os.unlink(current_file)
             os.unlink(lib_file)
             os.rmdir(utils_dir)
+
     def test_not_found_returns_none(self):
         """Test that None is returned when file is not found."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
