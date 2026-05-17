@@ -518,27 +518,35 @@ class TestASTBuilderVisitorEdgeCases:
         call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
                            arguments=[], children=[], position=Position("", 1, 1))
 
-        mod_for = visitor.visit_modular_for(None, [assignment, call])
+        sc_for = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        mod_for = visitor.visit_modular_for(None, sc_for)
         assert isinstance(mod_for, ModularFor)
         assert mod_for.assignments == [assignment]
+        assert mod_for.body == [call]
 
-        mod_c_for = visitor.visit_modular_c_for(None, [assignment, NumberLiteral(val=1.0, position=Position("", 1, 1)), assignment, call])
+        num = NumberLiteral(val=1.0, position=Position("", 1, 1))
+        sc_c_for = SemanticChildren([assignment, num, assignment, call], {"child_statement": [[call]]})
+        mod_c_for = visitor.visit_modular_c_for(None, sc_c_for)
         assert isinstance(mod_c_for, ModularCFor)
         assert mod_c_for.initial == [assignment]
         assert mod_c_for.increment == [assignment]
+        assert mod_c_for.body == [call]
 
-        mod_let = visitor.visit_modular_let(None, [assignment, call])
+        sc_let = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        mod_let = visitor.visit_modular_let(None, sc_let)
         assert isinstance(mod_let, ModularLet)
         assert mod_let.assignments == [assignment]
         assert mod_let.children == [call]
 
         arg = PositionalArgument(expr=NumberLiteral(val=2.0, position=Position("", 1, 1)), position=Position("", 1, 1))
-        mod_echo = visitor.visit_modular_echo(None, [arg, call])
+        sc_echo = SemanticChildren([arg, call], {"child_statement": [[call]]})
+        mod_echo = visitor.visit_modular_echo(None, sc_echo)
         assert isinstance(mod_echo, ModularEcho)
         assert mod_echo.arguments == [arg]
         assert mod_echo.children == [call]
 
-        mod_assert = visitor.visit_modular_assert(None, [arg, call])
+        sc_assert = SemanticChildren([arg, call], {"child_statement": [[call]]})
+        mod_assert = visitor.visit_modular_assert(None, sc_assert)
         assert isinstance(mod_assert, ModularAssert)
         assert mod_assert.arguments == [arg]
         assert mod_assert.children == [call]
@@ -553,7 +561,8 @@ class TestASTBuilderVisitorEdgeCases:
         call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
                            arguments=[], children=[], position=Position("", 1, 1))
 
-        mod_for = visitor.visit_modular_intersection_for(None, [assignment, call])
+        sc = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        mod_for = visitor.visit_modular_intersection_for(None, sc)
         assert isinstance(mod_for, ModularIntersectionFor)
         assert mod_for.assignments == [assignment]
 
@@ -568,9 +577,8 @@ class TestASTBuilderVisitorEdgeCases:
         call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
                            arguments=[], children=[], position=Position("", 1, 1))
 
-        mod_c_for = visitor.visit_modular_intersection_c_for(
-            None, [assignment, condition, assignment, call]
-        )
+        sc = SemanticChildren([assignment, condition, assignment, call], {"child_statement": [[call]]})
+        mod_c_for = visitor.visit_modular_intersection_c_for(None, sc)
         assert isinstance(mod_c_for, ModularIntersectionCFor)
         assert mod_c_for.initial == [assignment]
         assert mod_c_for.increment == [assignment]
@@ -674,7 +682,7 @@ class TestASTBuilderVisitorEdgeCases:
         
         node = MockNode()
         result = visitor.visit_child_statement(node, [])
-        assert result is None
+        assert result == []
 
     def test_visit_statement_variants(self):
         """Test visit_statement with empty, single, and multi children."""

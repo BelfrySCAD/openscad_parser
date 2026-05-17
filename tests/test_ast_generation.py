@@ -874,7 +874,9 @@ class TestModuleASTNodes:
         for_stmt = ast[0] if isinstance(ast, list) else ast
         assert isinstance(for_stmt, ModularFor)
         assert len(for_stmt.assignments) == 1
-        assert isinstance(for_stmt.body, ModularCall)
+        assert isinstance(for_stmt.body, list)
+        assert len(for_stmt.body) == 1
+        assert isinstance(for_stmt.body[0], ModularCall)
 
     def test_modular_if_ast(self, parser):
         """Test ModularIf AST node generation."""
@@ -883,7 +885,9 @@ class TestModuleASTNodes:
         if_stmt = ast[0] if isinstance(ast, list) else ast
         assert isinstance(if_stmt, ModularIf)
         assert isinstance(if_stmt.condition, BooleanLiteral)
-        assert isinstance(if_stmt.true_branch, ModularCall)
+        assert isinstance(if_stmt.true_branch, list)
+        assert len(if_stmt.true_branch) == 1
+        assert isinstance(if_stmt.true_branch[0], ModularCall)
 
     def test_modular_if_else_ast(self, parser):
         """Test ModularIfElse AST node generation."""
@@ -892,8 +896,10 @@ class TestModuleASTNodes:
         if_stmt = ast[0] if isinstance(ast, list) else ast
         assert isinstance(if_stmt, ModularIfElse)
         assert isinstance(if_stmt.condition, BooleanLiteral)
-        assert isinstance(if_stmt.true_branch, ModularCall)
-        assert isinstance(if_stmt.false_branch, ModularCall)
+        assert isinstance(if_stmt.true_branch, list)
+        assert isinstance(if_stmt.false_branch, list)
+        assert isinstance(if_stmt.true_branch[0], ModularCall)
+        assert isinstance(if_stmt.false_branch[0], ModularCall)
 
     def test_modifier_show_only_ast(self, parser):
         """Test ModularModifierShowOnly AST node generation."""

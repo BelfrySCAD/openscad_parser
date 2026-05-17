@@ -350,23 +350,26 @@ class TestModularConstructs:
         assert isinstance(let_node, ModularLet)
 
     def test_modular_if_single_branch(self):
-        """ModularIf with single statement (non-list true_branch)."""
+        """ModularIf with single statement (list true_branch with one element)."""
         ast = getASTfromString("if (true) cube(1);")
         assert ast is not None and isinstance(ast, list)
         build_scopes(ast)
         if_node = ast[0]
         assert isinstance(if_node, ModularIf)
-        assert if_node.true_branch.scope is not None  # type: ignore
+        assert isinstance(if_node.true_branch, list)
+        assert if_node.true_branch[0].scope is not None  # type: ignore
 
     def test_modular_if_else_single_branches(self):
-        """ModularIfElse with single-statement branches."""
+        """ModularIfElse with single-statement branches (list true/false_branch)."""
         ast = getASTfromString("if (true) cube(1); else sphere(1);")
         assert ast is not None and isinstance(ast, list)
         build_scopes(ast)
         if_node = ast[0]
         assert isinstance(if_node, ModularIfElse)
-        assert if_node.true_branch.scope is not None  # type: ignore
-        assert if_node.false_branch.scope is not None  # type: ignore
+        assert isinstance(if_node.true_branch, list)
+        assert isinstance(if_node.false_branch, list)
+        assert if_node.true_branch[0].scope is not None  # type: ignore
+        assert if_node.false_branch[0].scope is not None  # type: ignore
 
     def test_modular_for_list_body(self):
         """ModularFor with statement block (list body) or single statement."""
@@ -386,7 +389,8 @@ class TestModularConstructs:
         build_scopes(ast)
         for_node = ast[0]
         assert isinstance(for_node, ModularCFor)
-        assert for_node.body.scope.lookup_variable("i") is not None  # type: ignore
+        body = for_node.body[0] if isinstance(for_node.body, list) else for_node.body
+        assert body.scope.lookup_variable("i") is not None  # type: ignore
 
     def test_modular_c_for_block_body(self):
         """ModularCFor with statement block (list body)."""
