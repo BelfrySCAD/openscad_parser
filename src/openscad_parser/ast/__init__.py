@@ -87,6 +87,9 @@ from .builder import ASTBuilderVisitor, Position
 # Import scope classes
 from .scope import Scope, build_scopes
 
+# Import pretty-printer
+from .pretty_print import to_openscad
+
 # Import serialization functions
 from .serialization import (
     ast_to_dict,
