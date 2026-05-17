@@ -22,6 +22,11 @@ class TestModuleDefinition:
         code = "module test(x, y, z) {}"
         parse_success(parser, code)
 
+    def test_module_multiple_parameters_trailing_comma(self, parser):
+        """Test parameters with trailing comma."""
+        code = "module test(x, y,) {}"
+        parse_success(parser, code)
+
     def test_module_named_parameters(self, parser):
         """Test module with named parameters."""
         code = "module test(x=1, y=2) {}"
