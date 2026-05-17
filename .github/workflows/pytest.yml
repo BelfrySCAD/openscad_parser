@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -27,4 +29,15 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
-        run: pytest tests/
+        run: pytest tests/ --cov=src/openscad_parser
+
+      - name: Generate coverage badge
+        if: matrix.python-version == '3.12' && github.event_name == 'push'
+        run: coverage-badge -o coverage-badge.svg -f
+
+      - name: Commit coverage badge
+        if: matrix.python-version == '3.12' && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update coverage badge [skip ci]"
+          file_pattern: coverage-badge.svg

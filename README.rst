@@ -1,6 +1,9 @@
 OpenSCAD Parser
 ===============
 
+.. image:: https://raw.githubusercontent.com/BelfrySCAD/openscad_parser/main/coverage-badge.svg
+   :alt: Coverage
+
 A PEG parser for the OpenSCAD language that can parse OpenSCAD source code and optionally generate an Abstract Syntax Tree (AST) for programmatic analysis and manipulation.
 
 Features
