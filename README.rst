@@ -342,92 +342,106 @@ Literals
 Operators
 ~~~~~~~~~
 
-Arithmetic (binary operators have ``left: Expression``, ``right: Expression``):
+All operators inherit from ``Expression`` and represent their respective operations with typed fields for operands. The AST preserves operator precedence and associativity as defined in OpenSCAD.
 
-- ``AdditionOp``, ``SubtractionOp``, ``MultiplicationOp``, ``DivisionOp``, ``ModuloOp``, ``ExponentOp``
-- ``UnaryMinusOp(expr: Expression)``
+Arithmetic:
+
+- ``AdditionOp(left: Expression, right: Expression)``:  represents ``left + right``
+- ``SubtractionOp(left: Expression, right: Expression)``:  represents ``left - right``
+- ``MultiplicationOp(left: Expression, right: Expression)``:  represents ``left * right``
+- ``DivisionOp(left: Expression, right: Expression)``:  represents ``left / right``
+- ``ModuloOp(left: Expression, right: Expression)``:  represents ``left % right``
+- ``ExponentOp(left: Expression, right: Expression)``:  represents ``left ^ right``
+- ``UnaryMinusOp(expr: Expression)``:  represents ``-expr``
 
 Logical:
 
-- ``LogicalAndOp(left: Expression, right: Expression)``, ``LogicalOrOp(left: Expression, right: Expression)``
-- ``LogicalNotOp(expr: Expression)``
+- ``LogicalAndOp(left: Expression, right: Expression)``:  represents ``left && right``
+- ``LogicalOrOp(left: Expression, right: Expression)``:  represents ``left || right``
+- ``LogicalNotOp(expr: Expression)``:  represents ``!expr``
 
-Comparison (all have ``left: Expression``, ``right: Expression``):
+Comparison:
 
-- ``EqualityOp``, ``InequalityOp``
-- ``GreaterThanOp``, ``GreaterThanOrEqualOp``
-- ``LessThanOp``, ``LessThanOrEqualOp``
+- ``EqualityOp(left: Expression, right: Expression)``: represents ``left == right``
+- ``InequalityOp(left: Expression, right: Expression)``: represents ``left != right``
+- ``GreaterThanOp(left: Expression, right: Expression)``: represents ``left > right``
+- ``GreaterThanOrEqualOp(left: Expression, right: Expression)``: represents ``left >= right``
+- ``LessThanOp(left: Expression, right: Expression)``: represents ``left < right``
+- ``LessThanOrEqualOp(left: Expression, right: Expression)``: represents ``left <= right``
 
-Bitwise (binary operators have ``left: Expression``, ``right: Expression``):
+Bitwise:
 
-- ``BitwiseAndOp``, ``BitwiseOrOp``, ``BitwiseShiftLeftOp``, ``BitwiseShiftRightOp``
-- ``BitwiseNotOp(expr: Expression)``
+- ``BitwiseAndOp(left: Expression, right: Expression)``: represents ``left & right``
+- ``BitwiseOrOp(left: Expression, right: Expression)``: represents ``left | right``
+- ``BitwiseShiftLeftOp(left: Expression, right: Expression)``: represents ``left << right``
+- ``BitwiseShiftRightOp(left: Expression, right: Expression)``: represents ``left >> right``
+- ``BitwiseNotOp(expr: Expression)``: represents ``~expr``
 
 Other:
 
-- ``TernaryOp(condition: Expression, true_expr: Expression, false_expr: Expression)``: condition ? true_expr : false_expr
+- ``TernaryOp(condition: Expression, true_expr: Expression, false_expr: Expression)``: Represents ``condition ? true_expr : false_expr``
 
 Expressions
 ~~~~~~~~~~~
 
-- ``LetOp(assignments: list[Assignment], body: Expression)``: let(assignments) body
-- ``EchoOp(arguments: list[Argument], body: Expression)``: echo(arguments) body
-- ``AssertOp(arguments: list[Argument], body: Expression)``: assert(arguments) body
-- ``FunctionLiteral(arguments: list[Argument], body: Expression)``: Anonymous function expression
-- ``PrimaryCall(left: Expression, arguments: list[Argument])``: Function calls
+- ``LetOp(assignments: list[Assignment], body: Expression)``: let clause  ``let(assignments) body``
+- ``EchoOp(arguments: list[Argument], body: Expression)``: echo clause  ``echo(arguments) body``
+- ``AssertOp(arguments: list[Argument], body: Expression)``: assert clause  ``assert(arguments) body``
+- ``FunctionLiteral(arguments: list[Argument], body: Expression)``: Anonymous function expression  ``function(arguments) body``
+- ``PrimaryCall(left: Expression, arguments: list[Argument])``: Function calls  ``left(arguments)``
 - ``PrimaryIndex(left: Expression, index: Expression)``: Array indexing ``left[index]``
 - ``PrimaryMember(left: Expression, member: Identifier)``: Member access ``left.member``
 
 List Comprehensions
 ~~~~~~~~~~~~~~~~~~~
 
-- ``ListComprehension(elements: list[VectorElement])``: Vector/list literals
-- ``ListCompFor(assignments: list[Assignment], body: VectorElement)``: for loops
-- ``ListCompCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: VectorElement)``: C-style for loops
-- ``ListCompIf(condition: Expression, true_expr: VectorElement)``: Conditional inclusion
-- ``ListCompIfElse(condition: Expression, true_expr: VectorElement, false_expr: VectorElement)``: Conditional inclusion with else
-- ``ListCompLet(assignments: list[Assignment], body: Expression)``: let expressions
-- ``ListCompEach(body: VectorElement)``: each expressions (flattens nested lists)
+- ``ListComprehension(elements: list[VectorElement])``: Vector/list literals ``[elements]``
+- ``ListCompFor(assignments: list[Assignment], body: VectorElement)``: for loops in list comprehensions ``for(assignments) body``
+- ``ListCompCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: VectorElement)``: C-style for loops in list comprehensions ``for(initial; condition; increment) body``
+- ``ListCompIf(condition: Expression, true_expr: VectorElement)``: Conditional inclusion without else ``if(condition) true_expr``
+- ``ListCompIfElse(condition: Expression, true_expr: VectorElement, false_expr: VectorElement)``: Conditional inclusion with else ``if(condition) true_expr else false_expr``
+- ``ListCompLet(assignments: list[Assignment], body: Expression)``: let expressions in list comprehensions ``let(assignments) body``
+- ``ListCompEach(body: VectorElement)``: each expressions (flattens nested lists) ``each body``
 
 Module Instantiations
 ~~~~~~~~~~~~~~~~~~~~~
 
-- ``ModularCall(name: Identifier, arguments: list[Argument], children: list[ModuleInstantiation])``: Module calls
-- ``ModularFor(assignments: list[Assignment], body: ModuleInstantiation)``: for loops
-- ``ModularCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style for loops
-- ``ModularIntersectionFor(assignments: list[Assignment], body: ModuleInstantiation)``: intersection_for loops
-- ``ModularIntersectionCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style intersection_for loops
-- ``ModularLet(assignments: list[Assignment], children: list[ModuleInstantiation])``: let statements
-- ``ModularEcho(arguments: list[Argument], children: list[ModuleInstantiation])``: echo statements
-- ``ModularAssert(arguments: list[Argument], children: list[ModuleInstantiation])``: assert statements
-- ``ModularIf(condition: Expression, true_branch: ModuleInstantiation)``: if statements
-- ``ModularIfElse(condition: Expression, true_branch: ModuleInstantiation, false_branch: ModuleInstantiation)``: if/else statements
-- ``ModularModifierShowOnly(child: ModuleInstantiation)``: ``!`` modifier
-- ``ModularModifierHighlight(child: ModuleInstantiation)``: ``#`` modifier
-- ``ModularModifierBackground(child: ModuleInstantiation)``: ``%`` modifier
-- ``ModularModifierDisable(child: ModuleInstantiation)``: ``*`` modifier
+- ``ModularCall(name: Identifier, arguments: list[Argument], children: list[ModuleInstantiation])``: Module calls ``name(arguments) { children }``
+- ``ModularFor(assignments: list[Assignment], body: ModuleInstantiation)``: for loops in module bodies ``for(assignments) body``
+- ``ModularCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style for loops in module bodies ``for(initial; condition; increment) body``
+- ``ModularIntersectionFor(assignments: list[Assignment], body: ModuleInstantiation)``: intersection_for loops ``intersection_for(assignments) body``
+- ``ModularIntersectionCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style intersection_for loops ``intersection_for(initial; condition; increment) body``
+- ``ModularLet(assignments: list[Assignment], children: list[ModuleInstantiation])``: let statements in module bodies ``let(assignments) { children }``
+- ``ModularEcho(arguments: list[Argument], children: list[ModuleInstantiation])``: echo statements in module bodies ``echo(arguments) { children }``
+- ``ModularAssert(arguments: list[Argument], children: list[ModuleInstantiation])``: assert statements in module bodies ``assert(arguments) { children }``
+- ``ModularIf(condition: Expression, true_branch: ModuleInstantiation)``: if statements in module bodies, with no else ``if(condition) true_branch``
+- ``ModularIfElse(condition: Expression, true_branch: ModuleInstantiation, false_branch: ModuleInstantiation)``: if/else statements in module bodies ``if(condition) true_branch else false_branch``
+- ``ModularModifierShowOnly(child: ModuleInstantiation)``: Show-Only modifier ``!child``
+- ``ModularModifierHighlight(child: ModuleInstantiation)``: Highlight modifier ``#child``
+- ``ModularModifierBackground(child: ModuleInstantiation)``: Background modifier ``%child``
+- ``ModularModifierDisable(child: ModuleInstantiation)``: Disabler modifier ``*child``
 
 Declarations
 ~~~~~~~~~~~~
 
-- ``ModuleDeclaration(name: Identifier, parameters: list[ParameterDeclaration], children: list[ModuleInstantiation | Assignment | FunctionDeclaration | ModuleDeclaration])``: Module definitions
-- ``FunctionDeclaration(name: Identifier, parameters: list[ParameterDeclaration], expr: Expression)``: Function definitions
-- ``ParameterDeclaration(name: Identifier, default: Expression | None)``: Function/module parameters
-- ``Assignment(name: Identifier, expr: Expression)``: Variable assignments
+- ``ModuleDeclaration(name: Identifier, parameters: list[ParameterDeclaration], children: list[ModuleInstantiation | Assignment | FunctionDeclaration | ModuleDeclaration])``: Module definitions ``module name(parameters) { children }``
+- ``FunctionDeclaration(name: Identifier, parameters: list[ParameterDeclaration], expr: Expression)``: Function definitions ``function name(parameters) = expr;``
+- ``ParameterDeclaration(name: Identifier, default: Expression | None)``: Function/module parameter with optional default value  ``name=default`` or ``name``
+- ``Assignment(name: Identifier, expr: Expression)``: Variable assignments ``name = expr;``
 
 Statements
 ~~~~~~~~~~
 
-- ``UseStatement(filepath: StringLiteral)``: use <filepath>
-- ``IncludeStatement(filepath: StringLiteral)``: include <filepath>
-- ``PositionalArgument(expr: Expression)``: Function call positional arguments
-- ``NamedArgument(name: Identifier, expr: Expression)``: Function call named arguments (name=value)
+- ``UseStatement(filepath: StringLiteral)``: Represents ``use <filepath>``
+- ``IncludeStatement(filepath: StringLiteral)``: Represents ``include <filepath>``
+- ``PositionalArgument(expr: Expression)``: Function call positional arguments ``expr``
+- ``NamedArgument(name: Identifier, expr: Expression)``: Function call named arguments ``name=expr``
 
 Comments
 ~~~~~~~~
 
-- ``CommentLine(text: str)``: Single-line comments ``//``
-- ``CommentSpan(text: str)``: Multi-line comments ``/* */``
+- ``CommentLine(text: str)``: Single-line comments ``// str``
+- ``CommentSpan(text: str)``: Multi-line comments ``/* str */``
 
 All AST node classes are fully documented with docstrings that include:
 - Description of what the node represents
