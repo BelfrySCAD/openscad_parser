@@ -118,9 +118,6 @@ class SourceMap:
             start_pos: Starting position in the combined string (0-indexed)
             length: Number of characters to replace
         """
-        if length <= 0:
-            return
-        
         end_pos = start_pos + length
         
         # Collect segments to modify and new segments to add (for splits)
@@ -329,12 +326,6 @@ class SourceMap:
                 right = mid - 1
             else:
                 left = mid + 1
-        
-        # Check if position is in the last segment
-        if self._segments:
-            last_segment = self._segments[-1]
-            if last_segment.combined_start <= position < last_segment.combined_start + len(last_segment.content):
-                return last_segment
         
         return None
     
