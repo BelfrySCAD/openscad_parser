@@ -362,15 +362,9 @@ class TestJsonRoundTrip:
 
 
 class TestYamlSerialization:
-    """Tests for YAML serialization (requires PyYAML)."""
-
-    @pytest.fixture(autouse=True)
-    def check_yaml_available(self):
-        """Skip tests if PyYAML is not installed."""
-        pytest.importorskip("yaml")
+    """Tests for YAML serialization."""
 
     def test_yaml_output(self):
-        """Test YAML string output."""
         node = NumberLiteral(val=42.0, position=_pos())
         yaml_str = ast_to_yaml(node)
 
@@ -378,7 +372,6 @@ class TestYamlSerialization:
         assert "val: 42.0" in yaml_str
 
     def test_yaml_roundtrip(self):
-        """Test YAML round-trip."""
         ast = getASTfromString("cube(10);")
 
         yaml_str = ast_to_yaml(ast)
@@ -387,54 +380,107 @@ class TestYamlSerialization:
         assert isinstance(restored, list)
         assert len(restored) == 1
         assert isinstance(restored[0], ModularCall)
+        assert restored[0].name.name == "cube"
+
+    def test_yaml_roundtrip_expression(self):
+        ast = getASTfromString("x = 1 + 2;")
+
+        yaml_str = ast_to_yaml(ast)
+        restored = ast_from_yaml(yaml_str)
+
+        assert isinstance(restored, list)
+        assert isinstance(restored[0], Assignment)
+
+    def test_yaml_roundtrip_module_declaration(self):
+        ast = getASTfromString("module box(w=10) { cube(w); }")
+
+        yaml_str = ast_to_yaml(ast)
+        restored = ast_from_yaml(yaml_str)
+
+        assert isinstance(restored, list)
+        assert isinstance(restored[0], ModuleDeclaration)
+        assert restored[0].name.name == "box"
+
+    def test_yaml_roundtrip_complex_model(self):
+        code = """
+        module holder(width=10, height=5) {
+            difference() {
+                cube([width, width, height]);
+                translate([1, 1, 1])
+                    cube([width-2, width-2, height]);
+            }
+        }
+        holder(20, 10);
+        """
+        ast = getASTfromString(code)
+
+        yaml_str = ast_to_yaml(ast)
+        restored = ast_from_yaml(yaml_str)
+
+        assert isinstance(restored, list)
+        assert len(restored) == 2
+
+    def test_yaml_roundtrip_list_of_nodes(self):
+        ast = getASTfromString("x = 1; y = 2; z = 3;")
+
+        yaml_str = ast_to_yaml(ast)
+        restored = ast_from_yaml(yaml_str)
+
+        assert isinstance(restored, list)
+        assert len(restored) == 3
 
     def test_yaml_without_position(self):
-        """Test YAML output without position."""
         node = NumberLiteral(val=42.0, position=_pos())
         yaml_str = ast_to_yaml(node, include_position=False)
 
         assert "_position" not in yaml_str
         assert "_type: NumberLiteral" in yaml_str
 
+    def test_yaml_roundtrip_without_position(self):
+        ast = getASTfromString("cube(5);")
+
+        yaml_str = ast_to_yaml(ast, include_position=False)
+        restored = ast_from_yaml(yaml_str)
+
+        assert isinstance(restored, list)
+        assert isinstance(restored[0], ModularCall)
+        assert restored[0].position.origin == "<unknown>"
+
 
 class TestYamlImportError:
-    """Tests for YAML import error handling."""
+    """Tests that helpful ImportError is raised when PyYAML is missing."""
 
-    def test_yaml_import_error_message(self, monkeypatch):
-        """Test that helpful error message is shown when PyYAML is missing."""
-        # Mock yaml import to raise ImportError
+    def test_ast_to_yaml_import_error(self, monkeypatch):
         import sys
+        monkeypatch.setitem(sys.modules, "yaml", None)
+        with pytest.raises(ImportError, match="PyYAML"):
+            ast_to_yaml(NumberLiteral(val=42.0, position=_pos()))
 
-        # Remove yaml from sys.modules if present
-        yaml_backup = sys.modules.get("yaml")
-        sys.modules["yaml"] = None  # type: ignore
+    def test_ast_from_yaml_import_error(self, monkeypatch):
+        import sys
+        monkeypatch.setitem(sys.modules, "yaml", None)
+        with pytest.raises(ImportError, match="PyYAML"):
+            ast_from_yaml("_type: NumberLiteral\nval: 42.0\n")
 
-        # Need to reload the serialization module to trigger the import
-        import importlib
-        from openscad_parser.ast import serialization
 
-        try:
-            # Create a fresh import that will fail
-            def mock_import(name, *args, **kwargs):
-                if name == "yaml":
-                    raise ImportError("No module named 'yaml'")
-                return original_import(name, *args, **kwargs)
+class TestSerializationErrors:
+    """Tests for error branches in serialization/deserialization."""
 
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+    def test_ast_to_dict_unsupported_type_raises_error(self):
+        with pytest.raises(TypeError, match="Expected ASTNode"):
+            ast_to_dict(42)  # type: ignore
 
-            # For now, just test that the functions exist and have proper signatures
-            # The actual import error testing is tricky with pytest
-            node = NumberLiteral(val=42.0, position=_pos())
+    def test_serialize_unsupported_field_value_raises_error(self):
+        node = NumberLiteral(val=42.0, position=_pos())
+        node.val = {"unsupported": "dict"}  # type: ignore
+        with pytest.raises(TypeError, match="Unsupported type for serialization"):
+            ast_to_dict(node)
 
-            # If yaml is installed, this will work
-            # If not, it will raise ImportError with our message
-            try:
-                ast_to_yaml(node)
-            except ImportError as e:
-                assert "PyYAML" in str(e)
-        finally:
-            # Restore yaml module
-            if yaml_backup is not None:
-                sys.modules["yaml"] = yaml_backup
-            elif "yaml" in sys.modules:
-                del sys.modules["yaml"]
+    def test_deserialize_unsupported_field_value_raises_error(self):
+        data = {
+            "_type": "NumberLiteral",
+            "_position": {"origin": "<test>", "line": 1, "column": 1},
+            "val": object(),  # not a valid JSON type
+        }
+        with pytest.raises(TypeError, match="Unsupported type for deserialization"):
+            ast_from_dict(data)
