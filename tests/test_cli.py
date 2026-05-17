@@ -1,5 +1,6 @@
 """Tests for the openscad-parser CLI."""
 
+import io
 import json
 import subprocess
 import sys
@@ -114,3 +115,99 @@ class TestCLIErrors:
     def test_syntax_error_exits_nonzero(self):
         out, err, rc = _run("-", stdin="invalid @@@ syntax")
         assert rc != 0
+
+
+# ---------------------------------------------------------------------------
+# In-process tests: call main() directly so coverage is tracked
+# ---------------------------------------------------------------------------
+
+from openscad_parser.cli import main
+
+
+class TestCLIMainInProcess:
+    def test_stdin_json(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("x = 42;"))
+        main()
+        out, _ = capsys.readouterr()
+        data = json.loads(out)
+        assert data[0]["_type"] == "Assignment"
+
+    def test_explicit_json_flag(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--json", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("cube(10);"))
+        main()
+        out, _ = capsys.readouterr()
+        assert json.loads(out)[0]["_type"] == "ModularCall"
+
+    def test_json_indent(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--indent", "2", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("x = 1;"))
+        main()
+        out, _ = capsys.readouterr()
+        lines = out.splitlines()
+        assert any(l.startswith("  ") and not l.startswith("   ") for l in lines)
+
+    def test_file_input(self, monkeypatch, capsys, tmp_path):
+        f = tmp_path / "test.scad"
+        f.write_text("width = 20;\ncube([width, 10, 5]);")
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", str(f)])
+        main()
+        out, _ = capsys.readouterr()
+        data = json.loads(out)
+        assert len(data) == 2
+
+    def test_format_flag(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--format", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("cube(10);"))
+        main()
+        out, _ = capsys.readouterr()
+        assert "cube(10.0);" in out
+
+    def test_format_indent(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--format", "--indent", "2", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("module m(){cube(1);}"))
+        main()
+        out, _ = capsys.readouterr()
+        assert "  cube(1.0);" in out
+
+    def test_yaml_flag(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--yaml", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("x = 1;"))
+        main()
+        out, _ = capsys.readouterr()
+        assert "_type: Assignment" in out
+
+    def test_include_comments(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--include-comments", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("// hi\nx=1;"))
+        main()
+        out, _ = capsys.readouterr()
+        data = json.loads(out)
+        types = [n["_type"] for n in data]
+        assert "CommentLine" in types
+
+    def test_no_includes(self, monkeypatch, capsys, tmp_path):
+        f = tmp_path / "test.scad"
+        f.write_text("include <missing.scad>\nx = 1;")
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--no-includes", str(f)])
+        main()
+        out, _ = capsys.readouterr()
+        data = json.loads(out)
+        types = [n["_type"] for n in data]
+        assert "IncludeStatement" in types
+
+    def test_missing_file(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "/no/such/file.scad"])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        _, err = capsys.readouterr()
+        assert "openscad-parser" in err
+
+    def test_syntax_error_exits_nonzero(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "-"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO("invalid @@@ syntax"))
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1

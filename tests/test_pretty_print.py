@@ -6,6 +6,7 @@ from openscad_parser.ast.nodes import (
     Assignment, FunctionDeclaration, ModuleDeclaration,
     ModularCall, ModularFor, ModularIf, ModularIfElse,
 )
+from openscad_parser.ast.pretty_print import _as_list
 
 
 def _roundtrip(code: str) -> list:
@@ -266,3 +267,67 @@ module outer(n) {
         ast2 = _roundtrip(code.strip())
         assert isinstance(ast2[0], ModuleDeclaration)
         assert ast2[0].name.name == "outer"
+
+
+class TestIntersectionForFormatting:
+    def test_intersection_for(self):
+        out = _fmt("intersection_for(i=[0:3]) cube(i);")
+        assert "intersection_for (" in out
+        assert "cube(" in out
+
+    def test_intersection_for_block(self):
+        out = _fmt("intersection_for(i=[0:3]){cube(i);sphere(i);}")
+        assert "intersection_for (" in out
+        assert " {\n" in out
+
+    def test_intersection_c_for(self):
+        out = _fmt("intersection_for(i=0;i<3;i=i+1) cube(i);")
+        assert "intersection_for (" in out
+        assert ";" in out
+
+    def test_intersection_for_roundtrip(self):
+        from openscad_parser.ast.nodes import ModularIntersectionFor
+        code = "intersection_for (i = [0:3]) cube(i);"
+        ast2 = _roundtrip(code)
+        assert isinstance(ast2[0], ModularIntersectionFor)
+
+
+class TestLetEchoAssertFormatting:
+    def test_let_statement(self):
+        out = _fmt("let(x=1) cube(x);")
+        assert "let (x = 1.0)" in out
+        assert "cube(x);" in out
+
+    def test_let_block(self):
+        out = _fmt("let(x=1){cube(x);sphere(x);}")
+        assert "let (" in out
+        assert " {\n" in out
+
+    def test_echo_statement(self):
+        out = _fmt('echo("hello") cube(1);')
+        assert 'echo("hello")' in out
+
+    def test_echo_no_child(self):
+        out = _fmt('echo("debug");')
+        assert 'echo("debug")' in out
+
+    def test_assert_statement(self):
+        out = _fmt("assert(true) cube(1);")
+        assert "assert(True)" in out
+
+    def test_assert_no_child(self):
+        out = _fmt("assert(x > 0);")
+        assert "assert(x > 0.0)" in out
+
+
+class TestAsListHelper:
+    def test_list_passthrough(self):
+        lst = [1, 2, 3]
+        assert _as_list(lst) is lst
+
+    def test_none_returns_empty(self):
+        assert _as_list(None) == []
+
+    def test_single_value_wraps(self):
+        assert _as_list("x") == ["x"]
+        assert _as_list(42) == [42]

@@ -72,7 +72,7 @@ def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
         return f"{pad}module {node.name}({params}) {block}"
     if isinstance(node, ModuleInstantiation):
         return _fmt_inst(node, indent, w)
-    return f"{pad}{node}"
+    return f"{pad}{node}"  # pragma: no cover
 
 
 def _fmt_block(nodes: list, indent: int, w: int) -> str:
@@ -166,4 +166,4 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         connector = " else" if true_tail.startswith(" {") else f"\n{pad}else"
         return header + true_tail + connector + false_tail
 
-    return f"{pad}{prefix}{node};"
+    return f"{pad}{prefix}{node};"  # pragma: no cover

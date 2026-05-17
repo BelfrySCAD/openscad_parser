@@ -72,7 +72,7 @@ def main():
     elif args.yaml:
         try:
             from openscad_parser.ast import ast_to_yaml
-        except ImportError:
+        except ImportError:  # pragma: no cover
             print("openscad-parser: --yaml requires PyYAML (pip install openscad_parser[yaml])", file=sys.stderr)
             sys.exit(1)
         print(ast_to_yaml(ast))
@@ -80,5 +80,5 @@ def main():
         print(ast_to_json(ast, indent=args.indent))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

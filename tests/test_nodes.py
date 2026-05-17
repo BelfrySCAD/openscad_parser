@@ -90,6 +90,7 @@ def test_basic_literals_str():
     assert str(CommentLine(text=" hello", position=_pos())) == "// hello"
     assert str(CommentSpan(text=" block ", position=_pos())) == "/* block */"
     assert str(_ident("foo")) == "foo"
+    assert repr(_ident("foo")) == "Identifier('foo')"
     assert str(StringLiteral(val="bar", position=_pos())) == '"bar"'
     assert str(_num(1.5)) == "1.5"
     assert str(BooleanLiteral(val=True, position=_pos())) == "True"
