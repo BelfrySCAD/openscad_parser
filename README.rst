@@ -337,7 +337,7 @@ Literals
 - ``NumberLiteral(val: float)``: Numeric values
 - ``BooleanLiteral(val: bool)``: true/false values
 - ``UndefinedLiteral``: The ``undef`` value (no additional fields)
-- ``RangeLiteral(start: Expression, end: Expression, step: Expression)``: Range expressions ``[start:end:step]``
+- ``RangeLiteral(start: Expression, end: Expression, step: Expression)``: Range expressions ``[start:step:end]``
 
 Operators
 ~~~~~~~~~
