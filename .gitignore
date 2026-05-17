@@ -142,4 +142,5 @@ cython_debug/
 .pytest_cache/
 .vscode/settings.json
 .claude/worktrees/
+statusline.sh
 
