@@ -9,18 +9,22 @@ from .nodes import *
 @dataclass
 class Position:
     """Represents a location in a source origin.
-    
+
     Attributes:
         origin: Identifier for the source origin (e.g., file path, "<editor>", etc.)
         line: Line number (1-indexed)
         column: Column number (1-indexed)
+        start_offset: 0-based character offset of the token start within the origin's content
+        end_offset: 0-based character offset one past the token end within the origin's content
     """
     origin: str
     line: int
     column: int
+    start_offset: int = 0
+    end_offset: int = 0
 
     def __repr__(self):
-        return f"{self.origin}:{self.line}:{self.column}"
+        return f"{self.origin}:{self.line}:{self.column}[{self.start_offset}:{self.end_offset}]"
 
 
 class SemanticChildren(list):
@@ -141,26 +145,43 @@ class ASTBuilderVisitor(PTNodeVisitor):
             # This is useful for operator nodes like TOK_BINARY_OR, TOK_EQUAL, etc.
             return node
     
+    def _get_node_end_position(self, node) -> int:
+        """Return the combined-string offset one past the last character of node."""
+        if node is None:
+            return 0
+        try:
+            # NonTerminal: recurse to find the furthest end among children
+            end = getattr(node, 'position', 0)
+            for child in node:
+                child_end = self._get_node_end_position(child)
+                if child_end > end:
+                    end = child_end
+            return end
+        except TypeError:
+            pass
+        # Terminal: start + length of matched value
+        pos = getattr(node, 'position', 0)
+        val = getattr(node, 'value', '')
+        return pos + len(str(val))
+
     def _get_node_position(self, node):
         """Extract position information from an Arpeggio parse tree node.
-        
+
         Uses SourceMap to map positions back to original origins if available.
-        
+        start_offset and end_offset are 0-based offsets within the origin's content.
+
         Args:
             node: Arpeggio parse tree node
-            
+
         Returns:
             Position object for the node
         """
-        if hasattr(node, 'position'):
-            char_pos = node.position
-        else:
-            char_pos = 0
-        
+        char_pos = getattr(node, 'position', 0)
+        end_pos = self._get_node_end_position(node)
+
         # Use SourceMap if available to map position back to original origin
         if hasattr(self, 'source_map') and self.source_map.get_segments():
-            location = self.source_map.get_location(char_pos)
-            return Position(origin=location.origin, line=location.line, column=location.column)
+            return self.source_map.get_location(char_pos, end_pos)
         else:
             # Fallback: calculate line/column from character position
             input_str = self.parser.input if hasattr(self.parser, 'input') else ""
@@ -172,8 +193,14 @@ class ASTBuilderVisitor(PTNodeVisitor):
                 line = text_before.count('\n') + 1
                 last_newline = text_before.rfind('\n')
                 column = char_pos - last_newline  # 1-indexed
-            
-            return Position(origin=self.file if self.file else "<unknown>", line=line, column=column)
+
+            return Position(
+                origin=self.file if self.file else "<unknown>",
+                line=line,
+                column=column,
+                start_offset=char_pos,
+                end_offset=end_pos,
+            )
 
 
     # -- Basic Tokens --

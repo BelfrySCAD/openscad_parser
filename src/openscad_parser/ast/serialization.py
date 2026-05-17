@@ -184,6 +184,8 @@ def _serialize_position(position: Position) -> dict[str, Any]:
         "origin": position.origin,
         "line": position.line,
         "column": position.column,
+        "start_offset": position.start_offset,
+        "end_offset": position.end_offset,
     }
 
 
@@ -277,6 +279,8 @@ def _deserialize_position(data: dict[str, Any]) -> Position:
         origin=data["origin"],
         line=data["line"],
         column=data["column"],
+        start_offset=data.get("start_offset", 0),
+        end_offset=data.get("end_offset", 0),
     )
 
 
