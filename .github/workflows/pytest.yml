@@ -13,7 +13,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v6
@@ -32,7 +32,7 @@ jobs:
         run: pytest tests/ --cov=src/openscad_parser --cov-report=xml
 
       - name: Generate and commit coverage badge
-        if: matrix.python-version == '3.12' && github.event_name == 'push'
+        if: matrix.python-version == '3.13' && github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
