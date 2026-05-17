@@ -31,16 +31,13 @@ jobs:
       - name: Run tests
         run: pytest tests/ --cov=src/openscad_parser --cov-report=xml
 
-      - name: Generate coverage badge
-        if: matrix.python-version == '3.12' && github.event_name == 'push'
-        run: genbadge coverage -i coverage.xml -o coverage-badge.svg
-
-      - name: Commit coverage badge
+      - name: Generate and commit coverage badge
         if: matrix.python-version == '3.12' && github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull --rebase
+          genbadge coverage -i coverage.xml -o coverage-badge.svg
           git add coverage-badge.svg
           git diff --cached --quiet || git commit -m "Update coverage badge [skip ci]"
           git push
