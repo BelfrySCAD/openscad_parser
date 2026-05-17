@@ -22,6 +22,8 @@ Features
 - AST tree can contain comment nodes (single-line and multi-line)
 - AST tree uses dataclasses and can be pickled/unpickled for caching/serialization
 - JSON and YAML serialization/deserialization of AST trees
+- Pretty-printer that converts an AST back to formatted OpenSCAD source (``to_openscad()``)
+- Command-line interface (``openscad-parser``) for JSON/YAML/formatted output
 
 Installation
 ------------
@@ -512,6 +514,13 @@ Main Functions
     - ``scope.lookup_module(name)`` — search this scope and its parents
     - ``scope.parent`` — the enclosing scope (``None`` for root)
 
+``to_openscad(nodes: list[ASTNode], indent_width: int = 4)``
+    Convert a list of AST nodes to formatted OpenSCAD source code.
+
+    :param nodes: Top-level AST nodes as returned by the ``getAST*`` functions.
+    :param indent_width: Spaces per indentation level (default: 4).
+    :returns: Formatted OpenSCAD source as a string.
+
 Serialization Functions
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -718,6 +727,100 @@ They are also available from ``openscad_parser.ast.serialization``::
         ast_from_json,
         ast_from_yaml,
     )
+
+Pretty-Printing
+---------------
+
+The ``to_openscad()`` function converts an AST back to formatted OpenSCAD source code::
+
+    from openscad_parser.ast import getASTfromString, to_openscad
+
+    code = "module box(w,h){cube([w,h,1]);}"
+    ast = getASTfromString(code)
+
+    formatted = to_openscad(ast)
+    # module box(w, h) {
+    #     cube([w, h, 1.0]);
+    # }
+    print(formatted)
+
+The pretty-printer normalises whitespace and indentation while preserving the logical
+structure of the code. It supports all AST node types including modules, functions,
+control structures, modifiers, list comprehensions, and comments.
+
+``to_openscad(nodes, indent_width=4)``
+    Convert a list of AST nodes to formatted OpenSCAD source.
+
+    :param nodes: Top-level AST nodes (as returned by ``getAST*`` functions).
+    :param indent_width: Spaces per indentation level (default: 4).
+    :returns: Formatted OpenSCAD source code as a string.
+
+    - Blank lines are inserted before and after module/function declarations.
+    - Single-child module instantiations are formatted inline; multiple children use a block.
+    - Comments are preserved when the AST was parsed with ``include_comments=True``.
+
+Controlling indentation::
+
+    from openscad_parser.ast import getASTfromString, to_openscad
+
+    ast = getASTfromString("module m() { cube(1); }")
+    print(to_openscad(ast, indent_width=2))
+    # module m() {
+    #   cube(1.0);
+    # }
+
+Command-Line Interface
+-----------------------
+
+The ``openscad-parser`` CLI is installed alongside the package::
+
+    pip install openscad-parser
+
+Usage::
+
+    openscad-parser [OPTIONS] [FILE]
+
+Read from a file or ``-`` for stdin. Default output is JSON.
+
+**Options:**
+
+``--json``
+    Output AST as JSON (default).
+
+``--yaml``
+    Output AST as YAML (requires ``pip install openscad_parser[yaml]``).
+
+``--format``
+    Output reformatted OpenSCAD source code.
+
+``--indent N``
+    Indentation width in spaces (default: 4). Applies to ``--format`` and ``--json``.
+
+``--include-comments``
+    Include comment nodes in the output.
+
+``--no-includes``
+    Do not expand ``include <...>`` statements; keep ``IncludeStatement`` nodes instead.
+
+**Examples:**
+
+Dump AST as JSON::
+
+    openscad-parser model.scad
+    openscad-parser - < model.scad         # stdin
+
+Reformat OpenSCAD source::
+
+    openscad-parser --format model.scad
+    openscad-parser --format --indent 2 model.scad
+
+Output YAML::
+
+    openscad-parser --yaml model.scad
+
+Include comments in the AST::
+
+    openscad-parser --include-comments --json model.scad
 
 Error Handling
 --------------

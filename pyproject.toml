@@ -38,6 +38,9 @@ dependencies = [
     "arpeggio>=2.0.3",
 ]
 
+[project.scripts]
+openscad-parser = "openscad_parser.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",

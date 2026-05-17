@@ -333,7 +333,7 @@ class RangeLiteral(Primary):
     step: Expression
 
     def __str__(self):
-        return f"{self.start}:{self.end}:{self.step}"
+        return f"[{self.start}:{self.end}:{self.step}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
