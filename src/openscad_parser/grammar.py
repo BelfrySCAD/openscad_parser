@@ -454,7 +454,7 @@ def modular_echo():
 
 
 def modular_call():
-    return (module_instantiation_name, TOK_PAREN, arguments, TOK_ENDPAREN, child_statement)
+    return (module_instantiation_name, TOK_PAREN, arguments, TOK_ENDPAREN, ZeroOrMore(comment), child_statement)
 
 
 # --- Parameters used to define functions and modules ---

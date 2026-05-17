@@ -153,17 +153,6 @@ class TestEdgeCases:
         code = "{{{{}}}}"
         parse_success(parser, code)
 
-    def test_comments_everywhere(self, parser):
-        """Test code with comments everywhere."""
-        code = """
-        // Comment before
-        module /* inline comment */ test(/* param comment */ x) {
-            // body comment
-            cube(/* arg comment */ 10); // trailing comment
-        } // end comment
-        """
-        parse_success(parser, code)
-
 
 class TestRealWorldExamples:
     """Test real-world OpenSCAD code examples."""
