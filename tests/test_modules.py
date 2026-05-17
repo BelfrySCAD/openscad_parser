@@ -2,6 +2,8 @@
 
 import pytest
 from tests.conftest import parse_success
+from openscad_parser.ast import getASTfromString
+from openscad_parser.ast.nodes import ModularCall, ModularFor, ModularIf, ModularIfElse
 
 
 class TestModuleDefinition:
@@ -156,3 +158,77 @@ class TestModuleComplex:
         parse_success(parser, code)
 
 
+
+
+class TestChildStatementMultipleChildren:
+    """Regression tests for issue #10: visit_child_statement dropping all but
+    the first child when a statement_block contains multiple instantiations."""
+
+    def test_modular_call_block_all_children_returned(self):
+        """translate() with a block of three cubes should yield all three children."""
+        code = """
+translate([1, 2, 3])
+    rotate([4, 5, 6]) {
+        cube([7, 7, 7]);
+        cube([8, 8, 8]);
+        cube([9, 9, 9]);
+    }
+"""
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        translate = ast[0]
+        assert isinstance(translate, ModularCall)
+        assert translate.name.name == "translate"
+
+        rotate = translate.children[0]
+        assert isinstance(rotate, ModularCall)
+        assert rotate.name.name == "rotate"
+        assert len(rotate.children) == 3, (
+            f"Expected 3 children, got {len(rotate.children)}: {rotate.children}"
+        )
+        names = [c.name.name for c in rotate.children]
+        assert names == ["cube", "cube", "cube"]
+
+    def test_for_block_all_children_returned(self):
+        """for loop with a block body should capture all child instantiations."""
+        code = "for (i = [0:2]) { cube(i); sphere(i); }"
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        for_node = ast[0]
+        assert isinstance(for_node, ModularFor)
+        body = for_node.body
+        assert isinstance(body, list)
+        assert len(body) == 2
+        assert body[0].name.name == "cube"
+        assert body[1].name.name == "sphere"
+
+    def test_if_block_all_children_returned(self):
+        """if statement with a block body should capture all child instantiations."""
+        code = "if (true) { cube(1); sphere(2); cylinder(3); }"
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        if_node = ast[0]
+        assert isinstance(if_node, ModularIf)
+        branch = if_node.true_branch
+        assert isinstance(branch, list)
+        assert len(branch) == 3
+
+    def test_ifelse_block_both_branches_complete(self):
+        """if/else with blocks should capture all children in each branch."""
+        code = "if (true) { cube(1); sphere(2); } else { cylinder(3); cube(4); }"
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        if_node = ast[0]
+        assert isinstance(if_node, ModularIfElse)
+        assert len(if_node.true_branch) == 2
+        assert len(if_node.false_branch) == 2
+
+    def test_single_child_statement_still_works(self):
+        """Single child (no block) should still work and return a one-element list."""
+        code = "translate([1, 0, 0]) cube(5);"
+        ast = getASTfromString(code)
+        assert ast is not None and isinstance(ast, list)
+        translate = ast[0]
+        assert isinstance(translate, ModularCall)
+        assert len(translate.children) == 1
+        assert translate.children[0].name.name == "cube"

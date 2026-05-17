@@ -33,6 +33,11 @@ class SemanticChildren(list):
     def __getattr__(self, name):
         return self._rule_map.get(name, [])
 
+    def get_rule(self, rule_name, index=0):
+        """Return the index-th result for rule_name, or [] if absent/out of range."""
+        results = self._rule_map.get(rule_name, [])
+        return results[index] if index < len(results) else []
+
 
 class ASTBuilderVisitor(PTNodeVisitor):
     """
@@ -455,7 +460,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # After visiting: [Identifier, parameters, statement] (KWD_MODULE returns None)
         if hasattr(children, "module_name"):
             name = children.module_name[0] if children.module_name else None
-            parameters = children.parameter_block[0] if hasattr(children, "parameter_block") and children.parameter_block else []
+            parameters = children.get_rule("parameter_block")
             statement = list(children.statement) if hasattr(children, "statement") and children.statement else []
         else:
             name = children[0] if children else None
@@ -491,7 +496,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # After visiting: [Identifier, parameters, expr] (KWD_FUNCTION, TOK_ASSIGN, TOK_SEMICOLON return None)
         if hasattr(children, "function_name"):
             name = children.function_name[0] if children.function_name else None
-            parameters = children.parameter_block[0] if hasattr(children, "parameter_block") and children.parameter_block else []
+            parameters = children.get_rule("parameter_block")
             expr = children.expr[0] if hasattr(children, "expr") and children.expr else None
         else:
             name = children[0] if children else None
@@ -551,7 +556,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         # Grammar: (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, expr)
         # After visiting: [assignments_list, expr] (KWD_LET, TOK_PAREN, TOK_ENDPAREN return None)
         if hasattr(children, "assignments_expr"):
-            assignments = children.assignments_expr[0] if children.assignments_expr else []
+            assignments = children.get_rule("assignments_expr")
             body = children.expr[0] if hasattr(children, "expr") and children.expr else None
         else:
             assignments = children[0] if len(children) > 0 else []
@@ -559,12 +564,12 @@ class ASTBuilderVisitor(PTNodeVisitor):
         if body is None:
             raise ValueError("let_expr should have an Expression body")
         return LetOp(assignments=assignments, body=body, position=self._get_node_position(node))
-    
+
     def visit_assert_expr(self, node, children):
         # Grammar: (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
         # After visiting: [arguments_list, expr or None] (KWD_ASSERT, TOK_PAREN, TOK_ENDPAREN return None)
         if hasattr(children, "arguments"):
-            arguments = children.arguments[0] if children.arguments else []
+            arguments = children.get_rule("arguments")
             body = children.expr[0] if hasattr(children, "expr") and children.expr else None
         else:
             arguments = children[0] if len(children) > 0 else []
@@ -572,12 +577,12 @@ class ASTBuilderVisitor(PTNodeVisitor):
         if body is None:
             raise ValueError("assert_expr should have an Expression body")
         return AssertOp(arguments=arguments, body=body, position=self._get_node_position(node))
-    
+
     def visit_echo_expr(self, node, children):
         # Grammar: (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
         # After visiting: [arguments_list, expr or None] (KWD_ECHO, TOK_PAREN, TOK_ENDPAREN return None)
         if hasattr(children, "arguments"):
-            arguments = children.arguments[0] if children.arguments else []
+            arguments = children.get_rule("arguments")
             body = children.expr[0] if hasattr(children, "expr") and children.expr else None
         else:
             arguments = children[0] if len(children) > 0 else []
@@ -1078,18 +1083,12 @@ class ASTBuilderVisitor(PTNodeVisitor):
             raise ValueError("modular_call should have a module name")
         if not isinstance(name, Identifier):
             name = Identifier(name=str(name), position=self._get_node_position(node))
-        if hasattr(children, "arguments") and children.arguments:
-            arguments = children.arguments[0]
-        else:
-            arguments = children[1] if len(children) > 1 else []
+        arguments = children.get_rule("arguments") if hasattr(children, "get_rule") else (children[1] if len(children) > 1 else [])
         if arguments is None:  # pragma: no cover
             arguments = []
         if not isinstance(arguments, list):  # pragma: no cover
             arguments = [arguments]
-        if hasattr(children, "child_statement") and children.child_statement:
-            mods = children.child_statement[0]
-        else:
-            mods = children[2] if len(children) > 2 else []
+        mods = children.get_rule("child_statement") if hasattr(children, "get_rule") else (children[2] if len(children) > 2 else [])
         if mods is None:  # pragma: no cover
             mods = []
         if not isinstance(mods, list):
@@ -1104,57 +1103,86 @@ class ASTBuilderVisitor(PTNodeVisitor):
     def visit_modular_c_for(self, node, children):
         initial = children[0] if isinstance(children[0], list) else [children[0]]
         increment = children[2] if isinstance(children[2], list) else [children[2]]
+        body = children.get_rule('child_statement')
+        if not isinstance(body, list):
+            body = [body]
         return ModularCFor(
             initial=initial,
             condition=children[1],
             increment=increment,
-            body=children[3],
+            body=body,
             position=self._get_node_position(node)
         )
     
     def visit_modular_for(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
+        body = children.get_rule('child_statement')
+        if not isinstance(body, list):
+            body = [body]
         return ModularFor(
             assignments=assignments,
-            body=children[1],
+            body=body,
             position=self._get_node_position(node)
         )
     
     def visit_modular_intersection_c_for(self, node, children):
         initial = children[0] if isinstance(children[0], list) else [children[0]]
         increment = children[2] if isinstance(children[2], list) else [children[2]]
+        body = children.get_rule('child_statement')
+        if not isinstance(body, list):
+            body = [body]
         return ModularIntersectionCFor(
             initial=initial,
             condition=children[1],
             increment=increment,
-            body=children[3],
+            body=body,
             position=self._get_node_position(node)
         )
 
     def visit_modular_intersection_for(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
-        return ModularIntersectionFor(assignments=assignments, body=children[1], position=self._get_node_position(node))
+        body = children.get_rule('child_statement')
+        if not isinstance(body, list):
+            body = [body]
+        return ModularIntersectionFor(assignments=assignments, body=body, position=self._get_node_position(node))
     
     def visit_modular_let(self, node, children):
         assignments = children[0] if isinstance(children[0], list) else [children[0]]
-        mods = children[1] if isinstance(children[1], list) else [children[1]]
+        mods = children.get_rule('child_statement')
+        if not isinstance(mods, list):
+            mods = [mods]
         return ModularLet(assignments=assignments, children=mods, position=self._get_node_position(node))
     
     def visit_modular_echo(self, node, children):
         arguments = children[0] if isinstance(children[0], list) else [children[0]]
-        mods = children[1] if isinstance(children[1], list) else [children[1]]
+        mods = children.get_rule('child_statement')
+        if not isinstance(mods, list):
+            mods = [mods]
         return ModularEcho(arguments=arguments, children=mods, position=self._get_node_position(node))
     
     def visit_modular_assert(self, node, children):
         arguments = children[0] if isinstance(children[0], list) else [children[0]]
-        mods = children[1] if isinstance(children[1], list) else [children[1]]
+        mods = children.get_rule('child_statement')
+        if not isinstance(mods, list):
+            mods = [mods]
         return ModularAssert(arguments=arguments, children=mods, position=self._get_node_position(node))
     
     def visit_if_statement(self, node, children):
-        return ModularIf(condition=children[0], true_branch=children[1], position=self._get_node_position(node))
-    
+        condition = children[0]
+        true_branch = children.get_rule('child_statement')
+        if not isinstance(true_branch, list):
+            true_branch = [true_branch]
+        return ModularIf(condition=condition, true_branch=true_branch, position=self._get_node_position(node))
+
     def visit_ifelse_statement(self, node, children):
-        return ModularIfElse(condition=children[0], true_branch=children[1], false_branch=children[2], position=self._get_node_position(node))
+        condition = children[0]
+        true_branch = children.get_rule('child_statement')
+        false_branch = children.get_rule('child_statement', index=1)
+        if not isinstance(true_branch, list):
+            true_branch = [true_branch]
+        if not isinstance(false_branch, list):
+            false_branch = [false_branch]
+        return ModularIfElse(condition=condition, true_branch=true_branch, false_branch=false_branch, position=self._get_node_position(node))
     
     def visit_modifier_show_only(self, node, children):
         child = children[0]  # We know modifiers can only have one child.
@@ -1227,8 +1255,10 @@ class ASTBuilderVisitor(PTNodeVisitor):
     
     def visit_child_statement(self, node, children):
         # Grammar: [empty_statement, statement_block, module_instantiation]
-        # Return the first child if available
-        return children[0] if children else None
+        # Return all children as a list. statement_block flattens its contents
+        # into children via _visit_node's extend behavior, so we must return all
+        # of them rather than just children[0] (which would silently drop siblings).
+        return list(children)
     
     def visit_expr(self, node, children) -> Expression:
         if not children:
