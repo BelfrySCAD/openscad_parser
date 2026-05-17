@@ -264,34 +264,48 @@ class SourceMap:
         self._combined_string = ''.join(parts)
         self._combined_string_dirty = False
     
-    def get_location(self, position: int):
+    def get_location(self, position: int, end_position: Optional[int] = None):
         """Get the original source location for a position in the combined string.
-        
+
         Args:
             position: Character position in the combined string (0-indexed)
-        
+            end_position: Optional end position (exclusive) in the combined string.
+                If provided, end_offset in the returned Position will reflect the
+                end of the token within the origin's content.
+
         Returns:
-            Position with origin, line, and column in the original source
+            Position with origin, line, column, start_offset, and end_offset
         """
         from .builder import Position  # Lazy import to avoid circular dependency
-        
+
         if position < 0:
             position = 0
-        
+
         # Find the segment containing this position
         segment = self._find_segment(position)
-        
+
         if segment is None:
             # Position is beyond all segments, return location from last segment
             if self._segments:
                 last_segment = max(self._segments, key=lambda s: s.combined_start + len(s.content))
-                return self._calculate_location_in_segment(last_segment, len(last_segment.content))
+                seg_offset = len(last_segment.content)
+                end_offset = (
+                    (end_position - last_segment.combined_start)
+                    if end_position is not None
+                    else seg_offset
+                )
+                return self._calculate_location_in_segment(last_segment, seg_offset, end_offset)
             else:
                 return Position(origin="", line=1, column=1)
-        
-        # Calculate the position within the segment
+
+        # Calculate offsets within the segment
         segment_offset = position - segment.combined_start
-        return self._calculate_location_in_segment(segment, segment_offset)
+        end_offset = (
+            (end_position - segment.combined_start)
+            if end_position is not None
+            else segment_offset
+        )
+        return self._calculate_location_in_segment(segment, segment_offset, end_offset)
     
     def _find_segment(self, position: int) -> Optional[SourceSegment]:
         """Find the segment containing the given position.
@@ -324,30 +338,32 @@ class SourceMap:
         
         return None
     
-    def _calculate_location_in_segment(self, segment: SourceSegment, offset: int):
+    def _calculate_location_in_segment(self, segment: SourceSegment, offset: int,
+                                        end_offset: Optional[int] = None):
         """Calculate the source location for an offset within a segment.
-        
+
         Args:
             segment: The source segment
-            offset: Character offset within the segment (0-indexed)
-        
+            offset: Character offset within the segment (0-indexed), used for start
+            end_offset: Optional exclusive end offset within the segment (0-indexed)
+
         Returns:
-            Position with the original source location
+            Position with the original source location, start_offset, and end_offset
         """
         from .builder import Position  # Lazy import to avoid circular dependency
-        
+
         if offset < 0:
             offset = 0  # pragma: no cover
         if offset > len(segment.content):
             offset = len(segment.content)  # pragma: no cover
-        
+
         # Count lines in the content up to the offset
         content_before = segment.content[:offset]
         line_count = content_before.count('\n')
-        
+
         # Calculate line number
         line_number = segment.start_line + line_count
-        
+
         # Calculate column number
         if line_count == 0:
             # Same line as start
@@ -356,11 +372,15 @@ class SourceMap:
             # Find the last newline before offset
             last_newline = content_before.rfind('\n')
             column_number = offset - last_newline
-        
+
+        resolved_end = end_offset if end_offset is not None else offset
+
         return Position(
             origin=segment.origin,
             line=line_number,
-            column=column_number
+            column=column_number,
+            start_offset=offset,
+            end_offset=resolved_end,
         )
     
     def get_segments(self) -> list[SourceSegment]:

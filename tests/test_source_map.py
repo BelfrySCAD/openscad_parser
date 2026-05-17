@@ -674,3 +674,80 @@ class TestSourceMapEdgeCases:
 
         code = " \t\n\rX"
         assert _skip_whitespace(code, 0) == 4
+
+
+class TestPositionOffsets:
+    """Tests for start_offset and end_offset fields added to Position (issue #9)."""
+
+    def test_get_location_returns_start_offset(self):
+        """get_location populates start_offset relative to the segment start."""
+        source_map = SourceMap()
+        source_map.add_origin("main.scad", "x = 5;\ny = 10;\n")
+        loc = source_map.get_location(4)  # position of '5'
+        assert loc.start_offset == 4
+
+    def test_get_location_returns_end_offset(self):
+        """get_location populates end_offset when end_position is supplied."""
+        source_map = SourceMap()
+        source_map.add_origin("main.scad", "x = 5;\ny = 10;\n")
+        loc = source_map.get_location(4, end_position=5)
+        assert loc.start_offset == 4
+        assert loc.end_offset == 5
+
+    def test_get_location_end_defaults_to_start(self):
+        """When end_position is omitted, end_offset equals start_offset."""
+        source_map = SourceMap()
+        source_map.add_origin("main.scad", "abc")
+        loc = source_map.get_location(1)
+        assert loc.start_offset == loc.end_offset == 1
+
+    def test_offsets_relative_to_segment(self):
+        """Offsets are relative to the segment origin, not the combined string."""
+        source_map = SourceMap()
+        source_map.add_origin("a.scad", "aaa")   # combined 0-2
+        source_map.add_origin("b.scad", "bbb")   # combined 3-5
+        loc = source_map.get_location(4, end_position=6)  # 'bb' in b.scad
+        assert loc.origin == "b.scad"
+        assert loc.start_offset == 1   # offset 4 - segment_start 3 = 1
+        assert loc.end_offset == 3     # offset 6 - segment_start 3 = 3
+
+    def test_ast_node_offsets_single_file(self):
+        """AST nodes parsed from a string carry correct start/end offsets."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment
+        ast = getASTfromString("x = 42;")
+        assert ast is not None and isinstance(ast, list)
+        node = ast[0]
+        assert isinstance(node, Assignment)
+        assert node.position.start_offset == 0
+        assert node.position.end_offset == 7   # "x = 42;" is 7 chars
+
+    def test_ast_node_offsets_second_token(self):
+        """A token on the second line has the correct start offset."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment
+        ast = getASTfromString("x = 1;\ny = 2;")
+        assert ast is not None and isinstance(ast, list)
+        second = ast[1]
+        assert isinstance(second, Assignment)
+        # "x = 1;\n" is 7 chars, so "y = 2;" starts at offset 7
+        assert second.position.start_offset == 7
+        assert second.position.end_offset == 13
+
+    def test_position_repr_includes_offsets(self):
+        """Position __repr__ includes [start:end] offset range."""
+        pos = Position(origin="f.scad", line=1, column=1, start_offset=0, end_offset=6)
+        assert repr(pos) == "f.scad:1:1[0:6]"
+
+    def test_serialization_roundtrip_offsets(self):
+        """start_offset and end_offset survive JSON serialization roundtrip."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.serialization import ast_to_json, ast_from_json
+        ast = getASTfromString("cube(10);")
+        json_str = ast_to_json(ast)
+        restored = ast_from_json(json_str)
+        assert restored is not None and isinstance(restored, list)
+        orig_pos = ast[0].position
+        rest_pos = restored[0].position
+        assert rest_pos.start_offset == orig_pos.start_offset
+        assert rest_pos.end_offset == orig_pos.end_offset

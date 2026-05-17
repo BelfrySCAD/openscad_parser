@@ -39,7 +39,9 @@ class TestPosition:
     def test_position_repr(self):
         """Test Position __repr__ output."""
         pos = Position(origin="file.scad", line=3, column=7)
-        assert repr(pos) == "file.scad:3:7"
+        assert repr(pos) == "file.scad:3:7[0:0]"
+        pos2 = Position(origin="file.scad", line=3, column=7, start_offset=10, end_offset=15)
+        assert repr(pos2) == "file.scad:3:7[10:15]"
 
 
 class TestASTBuilderVisitorEdgeCases:
