@@ -170,7 +170,10 @@ class NumberLiteral(Primary):
     val: float
 
     def __str__(self):
-        return str(self.val)
+        s = str(self.val)
+        if 'e' not in s and s.endswith('.0'):
+            return s[:-2]
+        return s
 
 
 @dataclass

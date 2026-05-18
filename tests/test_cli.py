@@ -67,7 +67,7 @@ class TestCLIFormatOutput:
     def test_format_assignment(self):
         out, err, rc = _run("--format", "-", stdin="x=42;")
         assert rc == 0
-        assert out.strip() == "x = 42.0;"
+        assert out.strip() == "x = 42;"
 
     def test_format_module(self):
         out, err, rc = _run("--format", "-", stdin="module m(x){cube(x);}")
@@ -78,7 +78,7 @@ class TestCLIFormatOutput:
     def test_format_indent(self):
         out, err, rc = _run("--format", "--indent", "2", "-", stdin="module m(){cube(1);}")
         assert rc == 0
-        assert "  cube(1.0);" in out
+        assert "  cube(1);" in out
 
     def test_format_file(self, tmp_path):
         f = tmp_path / "model.scad"
@@ -162,14 +162,14 @@ class TestCLIMainInProcess:
         monkeypatch.setattr(sys, "stdin", io.StringIO("cube(10);"))
         main()
         out, _ = capsys.readouterr()
-        assert "cube(10.0);" in out
+        assert "cube(10);" in out
 
     def test_format_indent(self, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["openscad-parser", "--format", "--indent", "2", "-"])
         monkeypatch.setattr(sys, "stdin", io.StringIO("module m(){cube(1);}"))
         main()
         out, _ = capsys.readouterr()
-        assert "  cube(1.0);" in out
+        assert "  cube(1);" in out
 
     def test_yaml_flag(self, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["openscad-parser", "--yaml", "-"])
