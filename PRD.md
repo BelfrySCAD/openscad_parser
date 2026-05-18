@@ -3,7 +3,7 @@
 ## Overview
 
 **Project:** OpenSCAD Parser
-**Version:** 2.2.0
+**Version:** 2.4.0
 **Status:** Beta
 **License:** MIT
 
