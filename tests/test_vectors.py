@@ -144,6 +144,33 @@ class TestListComprehensionEach:
         code = "x = [each [1, 2, 3]];"
         parse_success(parser, code)
 
+    def test_listcomp_each_ast(self):
+        """each [1,2,3] produces ListCompEach wrapping a ListComprehension of three NumberLiterals."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import (
+            Assignment, ListComprehension, ListCompEach, NumberLiteral,
+        )
+        ast = getASTfromString("x = [each [1, 2, 3]];")
+        assert len(ast) == 1
+        assign = ast[0]
+        assert isinstance(assign, Assignment)
+        outer = assign.expr
+        assert isinstance(outer, ListComprehension)
+        assert len(outer.elements) == 1
+        each = outer.elements[0]
+        assert isinstance(each, ListCompEach)
+        inner = each.body
+        assert isinstance(inner, ListComprehension)
+        assert len(inner.elements) == 3
+        assert all(isinstance(e, NumberLiteral) for e in inner.elements)
+        assert [e.val for e in inner.elements] == [1.0, 2.0, 3.0]
+
+    def test_listcomp_each_str(self):
+        """str() of each [1,2,3] renders without .0 suffixes."""
+        from openscad_parser.ast import getASTfromString
+        ast = getASTfromString("x = [each [1, 2, 3]];")
+        assert str(ast[0].expr) == "[each [1, 2, 3]]"
+
     def test_listcomp_each_in_for(self, parser):
         """Test each in for list comprehension."""
         code = "x = [for (i = [0:2]) each [i, i+1]];"

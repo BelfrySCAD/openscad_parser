@@ -23,7 +23,7 @@ def _fmt(code: str) -> str:
 class TestAssignmentFormatting:
     def test_simple_assignment(self):
         out = _fmt("x=1;")
-        assert out == "x = 1.0;"
+        assert out == "x = 1;"
 
     def test_string_assignment(self):
         out = _fmt('label="hello";')
@@ -34,7 +34,7 @@ class TestAssignmentFormatting:
 
     def test_expression_assignment(self):
         out = _fmt("v=1+2;")
-        assert out == "v = 1.0 + 2.0;"
+        assert out == "v = 1 + 2;"
 
 
 class TestFunctionFormatting:
@@ -45,8 +45,8 @@ class TestFunctionFormatting:
 
     def test_function_with_default(self):
         out = _fmt("function f(x=1,y=2)=x+y;")
-        assert "x = 1.0" in out
-        assert "y = 2.0" in out
+        assert "x = 1" in out
+        assert "y = 2" in out
 
     def test_function_roundtrip(self):
         code = "function area(w, h) = w * h;"
@@ -85,24 +85,24 @@ class TestModuleFormatting:
 class TestModuleCallFormatting:
     def test_leaf_call(self):
         out = _fmt("cube(10);")
-        assert out == "cube(10.0);"
+        assert out == "cube(10);"
 
     def test_call_with_named_args(self):
         out = _fmt("cube(size=10,center=true);")
-        assert "size=10.0" in out
+        assert "size=10" in out
         assert "center=True" in out
 
     def test_single_child_inline(self):
         out = _fmt("translate([1,2,3]) cube(10);")
         assert "translate(" in out
-        assert "cube(10.0);" in out
+        assert "cube(10);" in out
 
     def test_multiple_children_block(self):
         out = _fmt("union() { cube(1); sphere(2); }")
         assert "union()" in out
         assert " {\n" in out
-        assert "cube(1.0);" in out
-        assert "sphere(2.0);" in out
+        assert "cube(1);" in out
+        assert "sphere(2);" in out
 
     def test_roundtrip_nested_calls(self):
         code = "translate([1, 0, 0]) rotate([0, 0, 45]) cube(5);"
@@ -131,7 +131,7 @@ class TestIfFormatting:
     def test_if_simple(self):
         out = _fmt("if(true) cube(1);")
         assert out.startswith("if (")
-        assert "cube(1.0);" in out
+        assert "cube(1);" in out
 
     def test_if_else_inline(self):
         out = _fmt("if(x>0) cube(1); else sphere(2);")
@@ -152,19 +152,19 @@ class TestIfFormatting:
 class TestModifierFormatting:
     def test_show_only(self):
         out = _fmt("!cube(1);")
-        assert "!cube(1.0);" in out
+        assert "!cube(1);" in out
 
     def test_highlight(self):
         out = _fmt("#cube(1);")
-        assert "#cube(1.0);" in out
+        assert "#cube(1);" in out
 
     def test_background(self):
         out = _fmt("%cube(1);")
-        assert "%cube(1.0);" in out
+        assert "%cube(1);" in out
 
     def test_disable(self):
         out = _fmt("*cube(1);")
-        assert "*cube(1.0);" in out
+        assert "*cube(1);" in out
 
     def test_nested_modifiers(self):
         out = _fmt("!#cube(1);")
@@ -185,7 +185,7 @@ class TestCommentFormatting:
         ast = getASTfromString("// hello\nx=1;", include_comments=True)
         out = to_openscad(ast)
         assert "// hello" in out
-        assert "x = 1.0;" in out
+        assert "x = 1;" in out
 
     def test_block_comment(self):
         ast = getASTfromString("/* block */\nx=1;", include_comments=True)
@@ -215,12 +215,12 @@ class TestIndentWidth:
     def test_custom_indent(self):
         ast = getASTfromString("module m(){cube(1);}")
         out = to_openscad(ast, indent_width=2)
-        assert "  cube(1.0);" in out
+        assert "  cube(1);" in out
 
     def test_zero_indent(self):
         ast = getASTfromString("module m(){cube(1);}")
         out = to_openscad(ast, indent_width=0)
-        assert "cube(1.0);" in out
+        assert "cube(1);" in out
 
 
 class TestRoundTrip:
@@ -285,7 +285,7 @@ class TestIntersectionForFormatting:
 class TestLetEchoAssertFormatting:
     def test_let_statement(self):
         out = _fmt("let(x=1) cube(x);")
-        assert "let (x = 1.0)" in out
+        assert "let (x = 1)" in out
         assert "cube(x);" in out
 
     def test_let_block(self):
@@ -307,7 +307,7 @@ class TestLetEchoAssertFormatting:
 
     def test_assert_no_child(self):
         out = _fmt("assert(x > 0);")
-        assert "assert(x > 0.0)" in out
+        assert "assert(x > 0)" in out
 
 
 class TestAsListHelper:

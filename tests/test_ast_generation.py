@@ -1784,9 +1784,9 @@ class TestBitwiseNotAST:
         assert isinstance(expr.right, Identifier)
 
     def test_str_simple(self, parser):
-        """__str__ renders ~5 as ~5.0 (numbers are stored as floats)."""
+        """__str__ renders ~5 as ~5 (whole-number floats omit the .0 suffix)."""
         expr = _expr(parser, "~5")
-        assert str(expr) == "~5.0"
+        assert str(expr) == "~5"
 
     def test_str_double(self, parser):
         """__str__ renders ~~a as ~~a."""

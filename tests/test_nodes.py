@@ -106,88 +106,88 @@ def test_params_args_assignments_str():
         default=None,
         position=_pos(),
     )
-    assert str(param_default) == "x = 1.0"
+    assert str(param_default) == "x = 1"
     assert str(param_required).strip() == "y"
 
     pos_arg = PositionalArgument(expr=_num(2.0), position=_pos())
     named_arg = NamedArgument(name=_ident("z"), expr=_num(3.0), position=_pos())
-    assert str(pos_arg) == "2.0"
-    assert str(named_arg) == "z=3.0"
+    assert str(pos_arg) == "2"
+    assert str(named_arg) == "z=3"
 
     assign = Assignment(name=_ident("a"), expr=_num(4.0), position=_pos())
-    assert str(assign) == "a = 4.0"
+    assert str(assign) == "a = 4"
 
     let_op = LetOp(assignments=[assign], body=_num(5.0), position=_pos())
     assert "let(" in str(let_op)
-    assert "a = 4.0" in str(let_op)
+    assert "a = 4" in str(let_op)
 
     echo_op = EchoOp(arguments=[pos_arg], body=_num(6.0), position=_pos())
     assert "echo(" in str(echo_op)
-    assert "2.0" in str(echo_op)
+    assert "2" in str(echo_op)
 
     assert_op = AssertOp(arguments=[named_arg], body=_num(7.0), position=_pos())
     assert "assert(" in str(assert_op)
-    assert "z=3.0" in str(assert_op)
+    assert "z=3" in str(assert_op)
 
 
 def test_operator_str():
     left = _num(1.0)
     right = _num(2.0)
-    assert str(UnaryMinusOp(expr=left, position=_pos())) == "-1.0"
-    assert str(AdditionOp(left=left, right=right, position=_pos())) == "1.0 + 2.0"
-    assert str(SubtractionOp(left=left, right=right, position=_pos())) == "1.0 - 2.0"
-    assert str(MultiplicationOp(left=left, right=right, position=_pos())) == "1.0 * 2.0"
-    assert str(DivisionOp(left=left, right=right, position=_pos())) == "1.0 / 2.0"
-    assert str(ModuloOp(left=left, right=right, position=_pos())) == "1.0 % 2.0"
-    assert str(ExponentOp(left=left, right=right, position=_pos())) == "1.0 ^ 2.0"
-    assert str(BitwiseAndOp(left=left, right=right, position=_pos())) == "1.0 & 2.0"
-    assert str(BitwiseOrOp(left=left, right=right, position=_pos())) == "1.0 | 2.0"
-    assert str(BitwiseNotOp(expr=left, position=_pos())) == "~1.0"
-    assert str(BitwiseShiftLeftOp(left=left, right=right, position=_pos())) == "1.0 << 2.0"
-    assert str(BitwiseShiftRightOp(left=left, right=right, position=_pos())) == "1.0 >> 2.0"
-    assert str(LogicalAndOp(left=left, right=right, position=_pos())) == "1.0 && 2.0"
-    assert str(LogicalOrOp(left=left, right=right, position=_pos())) == "1.0 || 2.0"
-    assert str(LogicalNotOp(expr=left, position=_pos())) == "!1.0"
-    assert str(TernaryOp(condition=left, true_expr=right, false_expr=left, position=_pos())) == "1.0 ? 2.0 : 1.0"
-    assert str(EqualityOp(left=left, right=right, position=_pos())) == "1.0 == 2.0"
-    assert str(InequalityOp(left=left, right=right, position=_pos())) == "1.0 != 2.0"
-    assert str(GreaterThanOp(left=left, right=right, position=_pos())) == "1.0 > 2.0"
-    assert str(GreaterThanOrEqualOp(left=left, right=right, position=_pos())) == "1.0 >= 2.0"
-    assert str(LessThanOp(left=left, right=right, position=_pos())) == "1.0 < 2.0"
-    assert str(LessThanOrEqualOp(left=left, right=right, position=_pos())) == "1.0 <= 2.0"
+    assert str(UnaryMinusOp(expr=left, position=_pos())) == "-1"
+    assert str(AdditionOp(left=left, right=right, position=_pos())) == "1 + 2"
+    assert str(SubtractionOp(left=left, right=right, position=_pos())) == "1 - 2"
+    assert str(MultiplicationOp(left=left, right=right, position=_pos())) == "1 * 2"
+    assert str(DivisionOp(left=left, right=right, position=_pos())) == "1 / 2"
+    assert str(ModuloOp(left=left, right=right, position=_pos())) == "1 % 2"
+    assert str(ExponentOp(left=left, right=right, position=_pos())) == "1 ^ 2"
+    assert str(BitwiseAndOp(left=left, right=right, position=_pos())) == "1 & 2"
+    assert str(BitwiseOrOp(left=left, right=right, position=_pos())) == "1 | 2"
+    assert str(BitwiseNotOp(expr=left, position=_pos())) == "~1"
+    assert str(BitwiseShiftLeftOp(left=left, right=right, position=_pos())) == "1 << 2"
+    assert str(BitwiseShiftRightOp(left=left, right=right, position=_pos())) == "1 >> 2"
+    assert str(LogicalAndOp(left=left, right=right, position=_pos())) == "1 && 2"
+    assert str(LogicalOrOp(left=left, right=right, position=_pos())) == "1 || 2"
+    assert str(LogicalNotOp(expr=left, position=_pos())) == "!1"
+    assert str(TernaryOp(condition=left, true_expr=right, false_expr=left, position=_pos())) == "1 ? 2 : 1"
+    assert str(EqualityOp(left=left, right=right, position=_pos())) == "1 == 2"
+    assert str(InequalityOp(left=left, right=right, position=_pos())) == "1 != 2"
+    assert str(GreaterThanOp(left=left, right=right, position=_pos())) == "1 > 2"
+    assert str(GreaterThanOrEqualOp(left=left, right=right, position=_pos())) == "1 >= 2"
+    assert str(LessThanOp(left=left, right=right, position=_pos())) == "1 < 2"
+    assert str(LessThanOrEqualOp(left=left, right=right, position=_pos())) == "1 <= 2"
 
 
 def test_primary_and_range_str():
     param = ParameterDeclaration(name=_ident("x"), default=None, position=_pos())
     func_lit = FunctionLiteral(parameters=[param], body=_num(4.0), position=_pos())
-    assert str(func_lit) == "function(x) 4.0"
+    assert str(func_lit) == "function(x) 4"
 
     call_args = [PositionalArgument(expr=_num(3.0), position=_pos())]
     call = PrimaryCall(left=_ident("foo"), arguments=call_args, position=_pos())
-    assert str(call) == "foo(3.0)"
+    assert str(call) == "foo(3)"
 
     idx = PrimaryIndex(left=_ident("arr"), index=_num(1.0), position=_pos())
-    assert str(idx) == "arr[1.0]"
+    assert str(idx) == "arr[1]"
 
     member = PrimaryMember(left=_ident("obj"), member=_ident("x"), position=_pos())
     assert str(member) == "obj.x"
 
     range_lit = RangeLiteral(start=_num(0.0), end=_num(5.0), step=_num(1.0), position=_pos())
-    assert str(range_lit) == "[0.0:5.0:1.0]"
+    assert str(range_lit) == "[0:5:1]"
 
 
 def test_list_comprehension_str():
     assign = Assignment(name=_ident("i"), expr=_num(0.0), position=_pos())
     list_let = ListCompLet(assignments=[assign], body=_num(1.0), position=_pos())
     assert str(list_let).startswith("let (")
-    assert "i = 0.0" in str(list_let)
+    assert "i = 0" in str(list_let)
 
     list_each = ListCompEach(body=_num(2.0), position=_pos())
-    assert str(list_each) == "each 2.0"
+    assert str(list_each) == "each 2"
 
     list_for = ListCompFor(assignments=[assign], body=_num(3.0), position=_pos())
     assert str(list_for).startswith("for (")
-    assert "i = 0.0" in str(list_for)
+    assert "i = 0" in str(list_for)
 
     list_c_for = ListCompCFor(
         inits=[assign],
@@ -198,22 +198,22 @@ def test_list_comprehension_str():
     )
     assert str(list_c_for).startswith("for (")
     assert "; " in str(list_c_for)
-    assert "i = 0.0" in str(list_c_for)
+    assert "i = 0" in str(list_c_for)
 
     list_if = ListCompIf(condition=_num(1.0), true_expr=_num(5.0), position=_pos())
-    assert str(list_if) == "if 1.0 5.0"
+    assert str(list_if) == "if 1 5"
 
     list_if_else = ListCompIfElse(condition=_num(1.0), true_expr=_num(6.0), false_expr=_num(7.0), position=_pos())
-    assert str(list_if_else) == "if 1.0 6.0 else 7.0"
+    assert str(list_if_else) == "if 1 6 else 7"
 
     list_comp = ListComprehension(elements=[list_if], position=_pos())
-    assert str(list_comp) == "[if 1.0 5.0]"
+    assert str(list_comp) == "[if 1 5]"
 
 
 def test_modular_and_declaration_str():
     pos_arg = PositionalArgument(expr=_num(1.0), position=_pos())
     mod_call = ModularCall(name=_ident("cube"), arguments=[pos_arg], children=[], position=_pos())
-    assert str(mod_call) == "cube(1.0)"
+    assert str(mod_call) == "cube(1)"
 
     assign = Assignment(name=_ident("i"), expr=_num(0.0), position=_pos())
     mod_for = ModularFor(assignments=[assign], body=mod_call, position=_pos())
@@ -232,21 +232,21 @@ def test_modular_and_declaration_str():
     assert "assert(" in str(mod_assert)
 
     mod_if = ModularIf(condition=_num(1.0), true_branch=mod_call, position=_pos())
-    assert str(mod_if) == "if (1.0) cube(1.0)"
+    assert str(mod_if) == "if (1) cube(1)"
 
     mod_if_else = ModularIfElse(condition=_num(1.0), true_branch=mod_call, false_branch=mod_call, position=_pos())
-    assert "if (1.0)" in str(mod_if_else)
+    assert "if (1)" in str(mod_if_else)
 
-    assert str(ModularModifierShowOnly(child=mod_call, position=_pos())) == "!cube(1.0)"
-    assert str(ModularModifierHighlight(child=mod_call, position=_pos())) == "#cube(1.0)"
-    assert str(ModularModifierBackground(child=mod_call, position=_pos())) == "%cube(1.0)"
-    assert str(ModularModifierDisable(child=mod_call, position=_pos())) == "*cube(1.0)"
+    assert str(ModularModifierShowOnly(child=mod_call, position=_pos())) == "!cube(1)"
+    assert str(ModularModifierHighlight(child=mod_call, position=_pos())) == "#cube(1)"
+    assert str(ModularModifierBackground(child=mod_call, position=_pos())) == "%cube(1)"
+    assert str(ModularModifierDisable(child=mod_call, position=_pos())) == "*cube(1)"
 
     mod_decl = ModuleDeclaration(name=_ident("m"), parameters=[], children=[mod_call], position=_pos())
-    assert str(mod_decl) == "module m() { cube(1.0) }"
+    assert str(mod_decl) == "module m() { cube(1) }"
 
     func_decl = FunctionDeclaration(name=_ident("f"), parameters=[], expr=_num(2.0), position=_pos())
-    assert str(func_decl) == "function f() = 2.0;"
+    assert str(func_decl) == "function f() = 2;"
 
     use_stmt = UseStatement(filepath=StringLiteral(val="lib.scad", position=_pos()), position=_pos())
     assert str(use_stmt) == "use <lib.scad>"
