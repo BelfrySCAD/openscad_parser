@@ -19,6 +19,7 @@ from .nodes import (
     ListComprehension,
     ListCompFor,
     ListCompCFor,
+    ListCompLet,
 )
 
 
@@ -76,6 +77,22 @@ def _fmt_list_elem(elem, indent: int, w: int) -> str:
         incrs = ", ".join(str(a) for a in elem.incrs)
         body = _fmt_list_elem(elem.body, indent + w, w)
         return f"for ({inits}; {elem.condition}; {incrs})\n{inner_pad}{body}"
+    if isinstance(elem, ListCompLet):
+        formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
+        body = _fmt_list_elem(elem.body, indent, w)
+        if len(formatted) > 1 or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
+            return f"let(\n{inner_pad}{assign_lines}\n{pad})\n{pad}{body}"
+        assigns = ", ".join(formatted)
+        return f"let({assigns}) {body}"
+    if isinstance(elem, LetOp):
+        formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
+        body = str(elem.body)
+        if len(formatted) > 1 or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
+            return f"let(\n{inner_pad}{assign_lines}\n{pad})\n{pad}{body}"
+        assigns = ", ".join(formatted)
+        return f"let({assigns}) {body}"
     return str(elem)
 
 
@@ -85,6 +102,11 @@ def _fmt_multiline_args(head: str, args: list, indent: int, w: int) -> str:
     pad = " " * indent
     arg_lines = (",\n" + inner_pad).join(str(a) for a in args)
     return f"{head}(\n{inner_pad}{arg_lines}\n{pad})"
+
+
+def _fmt_assign(assign, indent: int, w: int) -> str:
+    """Format an Assignment node, routing its expression through _fmt_expr."""
+    return f"{assign.name} = {_fmt_expr(assign.expr, indent, w)}"
 
 
 def _fmt_expr(expr, indent: int, w: int) -> str:
@@ -105,25 +127,31 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
         return f"echo({args})\n{pad}{_fmt_expr(expr.body, indent, w)}"
     if isinstance(expr, LetOp):
         inner_pad = " " * (indent + w)
-        if len(expr.assignments) <= 1:
-            assigns = ", ".join(str(a) for a in expr.assignments)
-            return f"let({assigns})\n{pad}{_fmt_expr(expr.body, indent, w)}"
-        else:
-            assign_lines = (",\n" + inner_pad).join(str(a) for a in expr.assignments)
+        formatted = [_fmt_assign(a, indent + w, w) for a in expr.assignments]
+        if len(formatted) > 1 or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
             return (
                 f"let(\n{inner_pad}{assign_lines}\n{pad})\n"
                 f"{pad}{_fmt_expr(expr.body, indent, w)}"
             )
+        assigns = ", ".join(formatted)
+        return f"let({assigns})\n{pad}{_fmt_expr(expr.body, indent, w)}"
     if isinstance(expr, PrimaryCall):
         inline = str(expr)
         if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
             return _fmt_multiline_args(str(expr.left), expr.arguments, indent, w)
     if isinstance(expr, ListComprehension):
-        inline = str(expr)
-        if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
-            inner_pad = " " * (indent + w)
-            pad = " " * indent
-            items = (",\n" + inner_pad).join(_fmt_list_elem(e, indent + w, w) for e in expr.elements)
+        inner_pad = " " * (indent + w)
+        let_multiline = any(
+            isinstance(e, (LetOp, ListCompLet)) and (
+                len(e.assignments) > 1 or
+                any("\n" in _fmt_assign(a, indent + w + w, w) for a in e.assignments)
+            )
+            for e in expr.elements
+        )
+        if len(str(expr)) + indent > _MULTILINE_CHAR_LIMIT or let_multiline:
+            formatted_elems = [_fmt_list_elem(e, indent + w, w) for e in expr.elements]
+            items = (",\n" + inner_pad).join(formatted_elems)
             return f"[\n{inner_pad}{items}\n{pad}]"
     return str(expr)
 
@@ -227,7 +255,13 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         return f"{pad}{prefix}intersection_for ({assigns})" + _fmt_child(node.body, indent, w)
 
     if isinstance(node, ModularLet):
-        assigns = _join_str(_as_list(node.assignments))
+        inner_pad = " " * (indent + w)
+        formatted = [_fmt_assign(a, indent + w, w) for a in _as_list(node.assignments)]
+        if len(formatted) > 1 or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
+            tail = _fmt_child(node.children, indent, w)
+            return f"{pad}{prefix}let (\n{inner_pad}{assign_lines}\n{pad}){tail}"
+        assigns = ", ".join(formatted)
         return f"{pad}{prefix}let ({assigns})" + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularEcho):

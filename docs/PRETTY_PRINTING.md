@@ -131,7 +131,7 @@ function f(x) =
 
 `let(...)` used as an expression always places its body on the next line at the same indentation as the `let`.
 
-**Zero or one assignment** — the whole `let(...)` fits on one line:
+**Inline** — zero or one assignment, and that assignment's value fits on a single line:
 
 ```
 function f(x) =
@@ -139,7 +139,7 @@ function f(x) =
     y + 1;
 ```
 
-**Two or more assignments** — `let(` opens, each assignment on its own line indented one level, `)` closes at the original indent:
+**Block** — two or more assignments, or any single assignment whose value is multiline (e.g. a ternary): `let(` opens, each assignment on its own line indented one level, `)` closes at the original indent:
 
 ```
 function f(a, b) =
@@ -148,7 +148,17 @@ function f(a, b) =
         y = b + 1
     )
     x + y;
+
+function f(x) =
+    let(
+        y = x > 0
+          ? x
+          : -x
+    )
+    y + 1;
 ```
+
+This same inline/block rule applies to `let()` inside `let()` module calls and inside list comprehensions.
 
 ### Long Function Call Expressions
 
@@ -207,9 +217,73 @@ x = [
 
 C-style `for` loops (`for (init; cond; incr)`) also place the body on the next line but keep the three-part header on one line.
 
+**`let` elements** within a comprehension follow the same inline/block rule as let expressions. If any assignment value is multiline, the whole comprehension is forced to expand and the `let` uses the block format:
+
+```
+x = [
+    let(
+        y = condition
+          ? value_a
+          : value_b
+    )
+    y + 1
+];
+```
+
+A `let` with only simple assignments stays inline and does not force comprehension expansion:
+
+```
+x = [let(y = 2) y + 1];
+```
+
+### Boolean Literals
+
+`true` and `false` are always written in lowercase, matching OpenSCAD syntax.
+
+```
+x = true;
+y = false;
+cube(size=10, center=true);
+```
+
+### Operator Precedence and Parentheses
+
+The pretty-printer re-inserts parentheses wherever they are needed to preserve the evaluation order encoded in the AST. Redundant parentheses present in the original source are dropped.
+
+```
+// source:   x = (3+5)/2;
+// printed:  x = (3 + 5) / 2;
+
+// source:   x = a - (b - c);
+// printed:  x = a - (b - c);   // parens needed: subtraction is left-associative
+
+// source:   x = a + b * c;
+// printed:  x = a + b * c;     // no parens needed: * already binds tighter
+
+// source:   x = (a || b) && c;
+// printed:  x = (a || b) && c; // parens needed: || has lower precedence than &&
+```
+
+The precedence table (low → high):
+
+| Level | Operators |
+|-------|-----------|
+| 10 | `?:` (ternary) |
+| 20 | `\|\|` |
+| 30 | `&&` |
+| 40 | `==`, `!=` |
+| 50 | `<`, `<=`, `>`, `>=` |
+| 55 | `\|` |
+| 57 | `&` |
+| 58 | `<<`, `>>` |
+| 60 | `+`, `-` |
+| 70 | `*`, `/`, `%` |
+| 80 | unary `-`, `!`, `~` |
+| 90 | `^` (right-associative) |
+
 ### Other Expressions
 
-All other expressions (arithmetic, boolean, comparisons, ranges, etc.) are rendered on a single line.
+All other expressions (ranges, identifiers, etc.) are rendered on a single line.
 
 ---
 
@@ -379,6 +453,17 @@ let (x = 1, y = 2)
 echo("value =", v);
 
 assert(x > 0)
+    cube(x);
+```
+
+`let` assignments follow the same inline/block rule as let expressions (see [§5](#5-expressions)): if any assignment value is multiline, `let` switches to the block format with one assignment per line:
+
+```
+let (
+    dumwarn = some_condition || other_condition
+      ? echo("deprecated warning")
+      : 0
+)
     cube(x);
 ```
 
