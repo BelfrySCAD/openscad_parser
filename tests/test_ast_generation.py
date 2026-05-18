@@ -1714,9 +1714,9 @@ class TestLogicalNotAST:
         assert node.condition.expr.name == "cond"
 
     def test_str_simple(self, parser):
-        """__str__ renders !true as !True."""
+        """__str__ renders !true as !true."""
         expr = _expr(parser, "!true")
-        assert str(expr) == "!True"
+        assert str(expr) == "!true"
 
     def test_str_double(self, parser):
         """__str__ renders !!a as !!a."""

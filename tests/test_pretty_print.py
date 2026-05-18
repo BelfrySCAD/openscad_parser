@@ -30,23 +30,60 @@ class TestAssignmentFormatting:
         assert out == 'label = "hello";'
 
     def test_bool_assignment(self):
-        assert _fmt("centered=true;") == "centered = True;"
+        assert _fmt("centered=true;") == "centered = true;"
 
     def test_expression_assignment(self):
         out = _fmt("v=1+2;")
         assert out == "v = 1 + 2;"
 
 
+class TestMultilineParamFormatting:
+    # Inline function header (with " =") must be <= 100 chars to stay on one line.
+    SHORT_FN  = "function f(a, b) = a + b;"
+    LONG_FN   = "function long_function_name(very_long_param_alpha, very_long_param_beta, very_long_param_gamma, extra) = a;"
+    SHORT_MOD = "module m(a, b) { cube(a); }"
+    LONG_MOD  = "module long_module_name(very_long_param_alpha, very_long_param_beta, very_long_param_gamma, extra_x=0) { cube(a); }"
+
+    def test_short_function_params_inline(self):
+        out = _fmt(self.SHORT_FN)
+        assert out.startswith("function f(a, b) =")
+
+    def test_long_function_params_multiline(self):
+        out = _fmt(self.LONG_FN)
+        assert out.startswith("function long_function_name(\n")
+        assert ") =\n" in out
+
+    def test_short_module_params_inline(self):
+        out = _fmt(self.SHORT_MOD)
+        assert out.startswith("module m(a, b)")
+
+    def test_long_module_params_multiline(self):
+        out = _fmt(self.LONG_MOD)
+        assert out.startswith("module long_module_name(\n")
+        assert ") {\n" in out
+
+    def test_long_function_params_roundtrip(self):
+        assert len(_roundtrip(self.LONG_FN)) == 1
+
+    def test_long_module_params_roundtrip(self):
+        assert len(_roundtrip(self.LONG_MOD)) == 1
+
+
 class TestFunctionFormatting:
     def test_simple_function(self):
         out = _fmt("function f(x)=x*2;")
-        assert out.startswith("function f(x) = ")
-        assert out.endswith(";")
+        assert out == "function f(x) =\n    x * 2;"
 
     def test_function_with_default(self):
         out = _fmt("function f(x=1,y=2)=x+y;")
-        assert "x = 1" in out
-        assert "y = 2" in out
+        assert "x=1" in out
+        assert "y=2" in out
+
+    def test_function_undef_default_omitted(self):
+        out = _fmt("function f(a=undef, b=3) = a + b;")
+        assert "a," in out
+        assert "undef" not in out
+        assert "b=3" in out
 
     def test_function_roundtrip(self):
         code = "function area(w, h) = w * h;"
@@ -90,7 +127,7 @@ class TestModuleCallFormatting:
     def test_call_with_named_args(self):
         out = _fmt("cube(size=10,center=true);")
         assert "size=10" in out
-        assert "center=True" in out
+        assert "center=true" in out
 
     def test_single_child_inline(self):
         out = _fmt("translate([1,2,3]) cube(10);")
@@ -303,11 +340,250 @@ class TestLetEchoAssertFormatting:
 
     def test_assert_statement(self):
         out = _fmt("assert(true) cube(1);")
-        assert "assert(True)" in out
+        assert "assert(true)" in out
 
     def test_assert_no_child(self):
         out = _fmt("assert(x > 0);")
         assert "assert(x > 0)" in out
+
+
+class TestListCompForFormatting:
+    def test_short_for_stays_inline(self):
+        assert _fmt("x = [for (i = [0:3]) i];") == "x = [for (i = [0:3:1]) i];"
+
+    def test_long_for_body_on_new_line(self):
+        out = _fmt("x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];")
+        assert "for (long_variable_name = [start_value:step_value:end_value])\n" in out
+        assert "        long_variable_name * scaling_factor_x\n" in out
+
+    def test_long_for_assignments_multiline(self):
+        out = _fmt("x = [for (very_long_variable_name_alpha = [start_value:end_value], very_long_variable_name_beta = [0:10]) very_long_variable_name_alpha];")
+        assert "for (\n" in out
+        assert "    very_long_variable_name_alpha = [start_value:end_value:1]," in out
+        assert ")\n" in out
+
+    def test_nested_for(self):
+        out = _fmt("x = [for (long_var_name_i = [start:end]) for (long_var_name_j = [start:end]) long_var_name_i + long_var_name_j];")
+        lines = out.split("\n")
+        for_i = next(l for l in lines if "long_var_name_i" in l and "for" in l)
+        for_j = next(l for l in lines if "long_var_name_j" in l and "for" in l)
+        assert for_j.startswith("        for")  # indented one level inside for_i
+        assert len(for_j) > len(for_i)
+
+    def test_cfor_body_on_new_line(self):
+        out = _fmt("x = [for (i = 0; i < very_long_condition_limit_value_maximum_xx; i = i + step_increment_value) i * scale];")
+        assert "for (i = 0;" in out
+        assert ")\n" in out
+
+    def test_for_roundtrip(self):
+        code = "x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];"
+        assert len(_roundtrip(code)) == 1
+
+
+class TestListComprehensionFormatting:
+    SHORT = "x = [1, 2, 3];"
+    # inline len > 100
+    LONG_LITERAL = "x = [very_long_element_name_a, very_long_element_name_b, very_long_element_name_c, very_long_element_name_d];"
+    LONG_COMP = "x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];"
+
+    def test_short_list_stays_inline(self):
+        assert _fmt(self.SHORT) == "x = [1, 2, 3];"
+
+    def test_long_literal_list_multiline(self):
+        out = _fmt(self.LONG_LITERAL)
+        assert out.startswith("x = [\n")
+        assert out.endswith("\n];")
+        assert "    very_long_element_name_a," in out
+
+    def test_long_comprehension_multiline(self):
+        out = _fmt(self.LONG_COMP)
+        assert out.startswith("x = [\n")
+        assert out.endswith("\n];")
+
+    def test_long_list_roundtrip(self):
+        assert len(_roundtrip(self.LONG_LITERAL)) == 1
+
+    def test_long_comp_roundtrip(self):
+        assert len(_roundtrip(self.LONG_COMP)) == 1
+
+
+class TestMultilineArgFormatting:
+    # Threshold is 100 chars (including indent).
+    SHORT = "foo(short_a, short_b, short_c);"                                             # 31 chars — inline
+    LONG  = "foo(long_arg_a, long_arg_b, long_arg_c, long_arg_d, long_arg_e, long_f);"   # 72 chars — inline
+    OVER  = "foo(long_arg_a, long_arg_b, long_arg_c, long_arg_d, long_arg_e, long_arg_f, long_arg_g, long_arg_h, long_arg_i);"  # 111 chars — multiline
+
+    def test_short_call_stays_inline(self):
+        assert _fmt(self.SHORT) == self.SHORT[:-1] + ";"  # same content
+
+    def test_just_over_limit_goes_multiline(self):
+        out = _fmt(self.OVER)
+        assert out.startswith("foo(\n")
+        assert out.endswith(");")
+
+    def test_long_call_single_child(self):
+        src = self.OVER[:-1] + " cube(1);"
+        out = _fmt(src)
+        assert out.startswith("foo(\n")
+        assert out.endswith(")\n    cube(1);")
+
+    def test_long_call_multiple_children(self):
+        src = self.OVER[:-1] + " { cube(1); sphere(2); }"
+        out = _fmt(src)
+        assert out.startswith("foo(\n")
+        assert ") {\n" in out
+
+    def test_long_expression_call(self):
+        out = _fmt("x = " + self.OVER)
+        assert "foo(\n" in out
+        assert out.endswith(");")
+
+    def test_indented_long_call(self):
+        out = _fmt("module m() { " + self.OVER + " }")
+        assert "foo(\n" in out
+        assert ");" in out
+
+    def test_long_call_roundtrip(self):
+        assert len(_roundtrip(self.OVER)) == 1
+
+
+class TestLetExprFormatting:
+    def test_let_no_assignments(self):
+        out = _fmt("function f() = let() 0;")
+        assert out == "function f() =\n    let()\n    0;"
+
+    def test_let_single_assignment(self):
+        out = _fmt("function f(x) = let(y = x * 2) y + 1;")
+        assert out == "function f(x) =\n    let(y = x * 2)\n    y + 1;"
+
+    def test_let_multi_assignment(self):
+        out = _fmt("function f(a, b) = let(x = a * 2, y = b + 1) x + y;")
+        assert out == (
+            "function f(a, b) =\n"
+            "    let(\n"
+            "        x = a * 2,\n"
+            "        y = b + 1\n"
+            "    )\n"
+            "    x + y;"
+        )
+
+    def test_let_roundtrip(self):
+        code = "function f(a, b) = let(x = a * 2, y = b + 1) x + y;"
+        assert len(_roundtrip(code)) == 1
+
+
+class TestAssertEchoExprFormatting:
+    def test_assert_expr(self):
+        out = _fmt("function f(x) = assert(x > 0) x * 2;")
+        assert out == "function f(x) =\n    assert(x > 0)\n    x * 2;"
+
+    def test_echo_expr(self):
+        out = _fmt('function f(x) = echo("x=", x) x * 2;')
+        assert out == 'function f(x) =\n    echo("x=", x)\n    x * 2;'
+
+    def test_chained_assert_echo(self):
+        out = _fmt('function f(x) = assert(x > 0) echo("x=", x) x * 2;')
+        assert out == 'function f(x) =\n    assert(x > 0)\n    echo("x=", x)\n    x * 2;'
+
+    def test_assert_with_ternary_body(self):
+        out = _fmt("function f(x) = assert(x > 0) x > 5 ? x : 0;")
+        assert "assert(x > 0)" in out
+        assert "? x" in out
+        assert ": 0;" in out
+
+    def test_assert_roundtrip(self):
+        code = "function f(x) = assert(x > 0) x * 2;"
+        assert len(_roundtrip(code)) == 1
+
+
+class TestTernaryFormatting:
+    def test_assignment_ternary(self):
+        out = _fmt("x = condition ? a : b;")
+        assert out == "x = condition\n  ? a\n  : b;"
+
+    def test_function_ternary(self):
+        out = _fmt("function f(x) = x > 0 ? x : -x;")
+        assert out == "function f(x) =\n    x > 0\n      ? x\n      : -x;"
+
+    def test_nested_ternary(self):
+        out = _fmt("x = a ? b : c ? d : e;")
+        assert "? b\n" in out
+        assert "    ? d\n" in out
+        assert "    : e;" in out
+
+    def test_indented_ternary(self):
+        out = _fmt("module m() { x = a ? b : c; }")
+        lines = out.split("\n")
+        q_line = next(l for l in lines if "?" in l)
+        assert q_line.startswith("      ? ")
+
+    def test_ternary_roundtrip(self):
+        code = "x = condition ? true_val : false_val;"
+        ast2 = _roundtrip(code)
+        assert len(ast2) == 1
+        assert isinstance(ast2[0], Assignment)
+
+
+class TestOperatorPrecedenceParens:
+    def test_addition_inside_division(self):
+        assert _fmt("x = (3+5)/2;") == "x = (3 + 5) / 2;"
+
+    def test_subtraction_inside_multiplication(self):
+        assert _fmt("x = (a-b)*c;") == "x = (a - b) * c;"
+
+    def test_left_assoc_sub_no_extra_parens(self):
+        assert _fmt("x = a - b - c;") == "x = a - b - c;"
+
+    def test_right_sub_needs_parens(self):
+        assert _fmt("x = a - (b - c);") == "x = a - (b - c);"
+
+    def test_mul_inside_add_no_parens(self):
+        assert _fmt("x = a + b * c;") == "x = a + b * c;"
+
+    def test_unary_minus_on_binary_expr(self):
+        assert _fmt("x = -(a+b);") == "x = -(a + b);"
+
+    def test_logical_not_on_comparison(self):
+        assert _fmt("x = !(a == b);") == "x = !(a == b);"
+
+    def test_logical_and_inside_or(self):
+        assert _fmt("x = (a || b) && c;") == "x = (a || b) && c;"
+
+    def test_or_inside_and_no_parens(self):
+        # && binds tighter than ||, so (a && b) || c needs no parens
+        assert _fmt("x = a && b || c;") == "x = a && b || c;"
+
+    def test_comparison_inside_logical(self):
+        assert _fmt("x = a > 0 && b < 10;") == "x = a > 0 && b < 10;"
+
+    def test_exponent_right_assoc(self):
+        assert _fmt("x = a ^ b ^ c;") == "x = a ^ b ^ c;"
+
+    def test_exponent_left_needs_parens(self):
+        assert _fmt("x = (a ^ b) ^ c;") == "x = (a ^ b) ^ c;"
+
+    def test_or_inside_bitwise_and_needs_parens(self):
+        # | (prec 55) < & (prec 57), so (a | b) & c needs parens
+        assert _fmt("x = (a | b) & c;") == "x = (a | b) & c;"
+
+    def test_bitwise_not(self):
+        assert _fmt("x = ~(a + b);") == "x = ~(a + b);"
+
+    def test_equality_redundant_parens_in_and(self):
+        # == (prec 40) > && (prec 30), so (a == b) && c needs no parens
+        assert _fmt("x = (a == b) && c;") == "x = a == b && c;"
+
+    def test_modulo_inside_addition(self):
+        assert _fmt("x = a + b % c;") == "x = a + b % c;"
+
+    def test_modulo_with_explicit_parens(self):
+        assert _fmt("x = (a + b) % c;") == "x = (a + b) % c;"
+
+    def test_roundtrip_preserves_semantics(self):
+        code = "x = (3+5)/2;"
+        ast2 = _roundtrip(code)
+        assert len(ast2) == 1
+        assert isinstance(ast2[0], Assignment)
 
 
 class TestAsListHelper:

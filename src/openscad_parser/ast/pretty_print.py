@@ -11,6 +11,14 @@ from .nodes import (
     ModularModifierShowOnly, ModularModifierHighlight,
     ModularModifierBackground, ModularModifierDisable,
     CommentLine, CommentSpan,
+    TernaryOp,
+    EchoOp,
+    AssertOp,
+    LetOp,
+    PrimaryCall,
+    ListComprehension,
+    ListCompFor,
+    ListCompCFor,
 )
 
 
@@ -35,6 +43,9 @@ def to_openscad(nodes: list[ASTNode], indent_width: int = 4) -> str:
     return "\n".join(parts)
 
 
+# Line length beyond which call arguments are formatted one-per-line.
+_MULTILINE_CHAR_LIMIT = 100
+
 # --- helpers ---
 
 def _as_list(val) -> list:
@@ -47,6 +58,74 @@ def _as_list(val) -> list:
 
 def _join_str(items) -> str:
     return ", ".join(str(i) for i in items)
+
+
+def _fmt_list_elem(elem, indent: int, w: int) -> str:
+    """Format a list comprehension element, placing the body on a new line for for loops."""
+    pad = " " * indent
+    inner_pad = " " * (indent + w)
+    if isinstance(elem, ListCompFor):
+        assigns_inline = ", ".join(str(a) for a in elem.assignments)
+        body = _fmt_list_elem(elem.body, indent + w, w)
+        if len(f"for ({assigns_inline})") + indent > _MULTILINE_CHAR_LIMIT:
+            assign_lines = (",\n" + inner_pad).join(str(a) for a in elem.assignments)
+            return f"for (\n{inner_pad}{assign_lines}\n{pad})\n{inner_pad}{body}"
+        return f"for ({assigns_inline})\n{inner_pad}{body}"
+    if isinstance(elem, ListCompCFor):
+        inits = ", ".join(str(a) for a in elem.inits)
+        incrs = ", ".join(str(a) for a in elem.incrs)
+        body = _fmt_list_elem(elem.body, indent + w, w)
+        return f"for ({inits}; {elem.condition}; {incrs})\n{inner_pad}{body}"
+    return str(elem)
+
+
+def _fmt_multiline_args(head: str, args: list, indent: int, w: int) -> str:
+    """Format `head(arg1, arg2, ...)` with each arg on its own line."""
+    inner_pad = " " * (indent + w)
+    pad = " " * indent
+    arg_lines = (",\n" + inner_pad).join(str(a) for a in args)
+    return f"{head}(\n{inner_pad}{arg_lines}\n{pad})"
+
+
+def _fmt_expr(expr, indent: int, w: int) -> str:
+    """Format an expression with indent-aware layout for ternary, assert, and echo."""
+    pad = " " * indent
+    if isinstance(expr, TernaryOp):
+        pad2 = " " * (indent + 2)
+        return (
+            f"{expr.condition}\n"
+            f"{pad2}? {_fmt_expr(expr.true_expr, indent + 2, w)}\n"
+            f"{pad2}: {_fmt_expr(expr.false_expr, indent + 2, w)}"
+        )
+    if isinstance(expr, AssertOp):
+        args = ", ".join(str(a) for a in expr.arguments)
+        return f"assert({args})\n{pad}{_fmt_expr(expr.body, indent, w)}"
+    if isinstance(expr, EchoOp):
+        args = ", ".join(str(a) for a in expr.arguments)
+        return f"echo({args})\n{pad}{_fmt_expr(expr.body, indent, w)}"
+    if isinstance(expr, LetOp):
+        inner_pad = " " * (indent + w)
+        if len(expr.assignments) <= 1:
+            assigns = ", ".join(str(a) for a in expr.assignments)
+            return f"let({assigns})\n{pad}{_fmt_expr(expr.body, indent, w)}"
+        else:
+            assign_lines = (",\n" + inner_pad).join(str(a) for a in expr.assignments)
+            return (
+                f"let(\n{inner_pad}{assign_lines}\n{pad})\n"
+                f"{pad}{_fmt_expr(expr.body, indent, w)}"
+            )
+    if isinstance(expr, PrimaryCall):
+        inline = str(expr)
+        if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
+            return _fmt_multiline_args(str(expr.left), expr.arguments, indent, w)
+    if isinstance(expr, ListComprehension):
+        inline = str(expr)
+        if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
+            inner_pad = " " * (indent + w)
+            pad = " " * indent
+            items = (",\n" + inner_pad).join(_fmt_list_elem(e, indent + w, w) for e in expr.elements)
+            return f"[\n{inner_pad}{items}\n{pad}]"
+    return str(expr)
 
 
 def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
@@ -62,14 +141,23 @@ def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
     if isinstance(node, IncludeStatement):
         return f"{pad}include <{node.filepath.val}>"
     if isinstance(node, Assignment):
-        return f"{pad}{node.name} = {node.expr};"
+        return f"{pad}{node.name} = {_fmt_expr(node.expr, indent, w)};"
     if isinstance(node, FunctionDeclaration):
-        params = _join_str(node.parameters)
-        return f"{pad}function {node.name}({params}) = {node.expr};"
+        head = f"{pad}function {node.name}"
+        params_inline = _join_str(node.parameters)
+        expr_pad = " " * (indent + w)
+        if len(f"{head}({params_inline}) =") > _MULTILINE_CHAR_LIMIT:
+            param_block = _fmt_multiline_args(head, node.parameters, indent, w)
+            return f"{param_block} =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
+        return f"{head}({params_inline}) =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
     if isinstance(node, ModuleDeclaration):
-        params = _join_str(node.parameters)
+        head = f"{pad}module {node.name}"
+        params_inline = _join_str(node.parameters)
         block = _fmt_block(node.children, indent, w)
-        return f"{pad}module {node.name}({params}) {block}"
+        if len(f"{head}({params_inline})") > _MULTILINE_CHAR_LIMIT:
+            param_block = _fmt_multiline_args(head, node.parameters, indent, w)
+            return f"{param_block} {block}"
+        return f"{head}({params_inline}) {block}"
     if isinstance(node, ModuleInstantiation):
         return _fmt_inst(node, indent, w)
     return f"{pad}{node}"  # pragma: no cover
@@ -122,8 +210,13 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         return _fmt_inst(node.child, indent, w, "*" + prefix)
 
     if isinstance(node, ModularCall):
-        args = _join_str(node.arguments)
-        return f"{pad}{prefix}{node.name}({args})" + _fmt_child(node.children, indent, w)
+        head = f"{pad}{prefix}{node.name}"
+        inline = f"{head}({_join_str(node.arguments)})"
+        if len(inline) > _MULTILINE_CHAR_LIMIT:
+            call = _fmt_multiline_args(head, node.arguments, indent, w)
+        else:
+            call = inline
+        return call + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularFor):
         assigns = _join_str(_as_list(node.assignments))

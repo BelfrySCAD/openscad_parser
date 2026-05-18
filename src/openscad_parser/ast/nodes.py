@@ -193,7 +193,7 @@ class BooleanLiteral(Primary):
     val: bool
 
     def __str__(self):
-        return str(self.val)
+        return "true" if self.val else "false"
 
 
 @dataclass
@@ -235,7 +235,8 @@ class ParameterDeclaration(ASTNode):
     default: Expression|None
 
     def __str__(self):
-        return f"{self.name}{f' = {self.default}' if self.default else '' }"
+        has_default = self.default is not None and not isinstance(self.default, UndefinedLiteral)
+        return f"{self.name}{f'={self.default}' if has_default else ''}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -469,21 +470,21 @@ class AssertOp(Expression):
 @dataclass
 class UnaryMinusOp(Expression):
     """Represents an OpenSCAD unary minus (negation) operation.
-    
+
     Negates a numeric expression, making positive values negative and vice versa.
-    
+
     Examples:
         -5                             // Result: -5
         -x                             // Negate variable
         -(x + y)                       // Negate expression
-    
+
     Attributes:
         expr: The expression to negate.
     """
     expr: Expression
 
     def __str__(self):
-        return f"-{self.expr}"
+        return f"-{_lp(self.expr, _prec(self))}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -493,15 +494,15 @@ class UnaryMinusOp(Expression):
 @dataclass
 class AdditionOp(Expression):
     """Represents an OpenSCAD addition operation.
-    
+
     Performs arithmetic addition of two expressions. Can be used with numbers
     or vectors (element-wise addition for vectors).
-    
+
     Examples:
         1 + 2                          // Result: 3
         [1, 2, 3] + [4, 5, 6]         // Result: [5, 7, 9]
         x + y                          // Variable addition
-    
+
     Attributes:
         left: The left operand expression.
         right: The right operand expression.
@@ -510,7 +511,8 @@ class AdditionOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} + {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} + {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -538,7 +540,8 @@ class SubtractionOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} - {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} - {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -566,7 +569,8 @@ class MultiplicationOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} * {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} * {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -594,7 +598,8 @@ class DivisionOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} / {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} / {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -621,7 +626,8 @@ class ModuloOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} % {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} % {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -648,7 +654,8 @@ class ExponentOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} ^ {self.right}"
+        p = _prec(self)
+        return f"{_rp(self.left, p)} ^ {_lp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -675,7 +682,8 @@ class BitwiseAndOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} & {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} & {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -702,7 +710,8 @@ class BitwiseOrOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} | {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} | {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -726,7 +735,7 @@ class BitwiseNotOp(Expression):
     expr: Expression
 
     def __str__(self):
-        return f"~{self.expr}"
+        return f"~{_lp(self.expr, _prec(self))}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -752,7 +761,8 @@ class BitwiseShiftLeftOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} << {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} << {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -779,7 +789,8 @@ class BitwiseShiftRightOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} >> {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} >> {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -807,7 +818,8 @@ class LogicalAndOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} && {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} && {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -835,7 +847,8 @@ class LogicalOrOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} || {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} || {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -861,7 +874,7 @@ class LogicalNotOp(Expression):
     expr: Expression
 
     def __str__(self):
-        return f"!{self.expr}"
+        return f"!{_lp(self.expr, _prec(self))}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -918,7 +931,8 @@ class EqualityOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} == {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} == {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -945,7 +959,8 @@ class InequalityOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} != {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} != {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -972,7 +987,8 @@ class GreaterThanOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} > {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} > {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -999,7 +1015,8 @@ class GreaterThanOrEqualOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} >= {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} >= {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1026,7 +1043,8 @@ class LessThanOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} < {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} < {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1053,7 +1071,8 @@ class LessThanOrEqualOp(Expression):
     right: Expression
 
     def __str__(self):
-        return f"{self.left} <= {self.right}"
+        p = _prec(self)
+        return f"{_lp(self.left, p)} <= {_rp(self.right, p)}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1890,6 +1909,46 @@ class IncludeStatement(ASTNode):
 
     def __str__(self):
         return f"include <{self.filepath.val}>"
+
+
+# ---------------------------------------------------------------------------
+# Operator precedence helpers (used by __str__ methods to emit parentheses)
+# ---------------------------------------------------------------------------
+
+_PREC: dict[type, int] = {
+    # loosest
+    TernaryOp: 10,
+    LogicalOrOp: 20,
+    LogicalAndOp: 30,
+    EqualityOp: 40, InequalityOp: 40,
+    LessThanOp: 50, LessThanOrEqualOp: 50, GreaterThanOp: 50, GreaterThanOrEqualOp: 50,
+    BitwiseOrOp: 55,
+    BitwiseAndOp: 57,
+    BitwiseShiftLeftOp: 58, BitwiseShiftRightOp: 58,
+    AdditionOp: 60, SubtractionOp: 60,
+    MultiplicationOp: 70, DivisionOp: 70, ModuloOp: 70,
+    UnaryMinusOp: 80, LogicalNotOp: 80, BitwiseNotOp: 80,
+    ExponentOp: 90,
+    # tightest — primary expressions (literals, identifiers, calls, etc.) default to 99
+}
+
+
+def _prec(node) -> int:
+    return _PREC.get(type(node), 99)
+
+
+def _lp(child, parent_prec: int) -> str:
+    """Left-operand: parenthesize when child binds strictly looser than parent."""
+    return f"({child})" if _prec(child) < parent_prec else str(child)
+
+
+def _rp(child, parent_prec: int) -> str:
+    """Right-operand: parenthesize when child binds looser than OR equal to parent.
+
+    The stricter rule is needed for left-associative operators so that
+    ``a - (b - c)`` is not flattened to ``a - b - c``.
+    """
+    return f"({child})" if _prec(child) <= parent_prec else str(child)
 
 
 def _collect_hoisted_declarations(nodes, scope: "Scope") -> None:

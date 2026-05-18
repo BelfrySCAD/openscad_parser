@@ -91,7 +91,7 @@ def test_basic_literals_str():
     assert repr(_ident("foo")) == "Identifier('foo')"
     assert str(StringLiteral(val="bar", position=_pos())) == '"bar"'
     assert str(_num(1.5)) == "1.5"
-    assert str(BooleanLiteral(val=True, position=_pos())) == "True"
+    assert str(BooleanLiteral(val=True, position=_pos())) == "true"
     assert str(UndefinedLiteral(position=_pos())) == "undef"
 
 
@@ -106,7 +106,7 @@ def test_params_args_assignments_str():
         default=None,
         position=_pos(),
     )
-    assert str(param_default) == "x = 1"
+    assert str(param_default) == "x=1"
     assert str(param_required).strip() == "y"
 
     pos_arg = PositionalArgument(expr=_num(2.0), position=_pos())
