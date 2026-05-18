@@ -1061,35 +1061,30 @@ class LessThanOrEqualOp(Expression):
 @dataclass
 class FunctionLiteral(Expression):
     """Represents an OpenSCAD function literal (anonymous function).
-    
+
     Function literals are anonymous functions that can be assigned to variables
     or used directly in expressions. They are defined using the 'function' keyword.
-    
+
     Examples:
         x = function(x) x * 2;          // Anonymous function assigned to x
         function(a, b) a + b            // Function literal in expression
-    
+
     Attributes:
-        arguments: List of parameter declarations (as Argument nodes).
+        parameters: List of parameter declarations.
         body: The expression body of the function.
     """
-    arguments: list[Argument]
+    parameters: list[ParameterDeclaration]
     body: Expression
 
     def __str__(self):
-        return f"function({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
+        return f"function({', '.join(str(p) for p in self.parameters)}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         func_scope = parent_scope.child_scope()
-        # Normalize: builder may pass a single ParameterDeclaration for one-param literals
-        arguments = self.arguments
-        if not isinstance(arguments, (list, tuple)):
-            arguments = [arguments] if arguments is not None else []
-        for arg in arguments:
-            if isinstance(arg, ParameterDeclaration):
-                func_scope.define_variable(arg.name.name, arg)
-                arg.build_scope(func_scope)
+        for param in self.parameters:
+            func_scope.define_variable(param.name.name, param)
+            param.build_scope(func_scope)
         self.body.build_scope(func_scope)
 
 
@@ -1202,10 +1197,10 @@ class ListCompLet(VectorElement):
     
     Attributes:
         assignments: List of local variable assignments.
-        body: The expression body that uses the assigned variables.
+        body: The vector element body that uses the assigned variables.
     """
     assignments: list[Assignment]
-    body: Expression
+    body: VectorElement
 
     def __str__(self):
         return f"let ({', '.join(str(a) for a in self.assignments)}) {self.body}"
@@ -1213,11 +1208,7 @@ class ListCompLet(VectorElement):
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         let_scope = parent_scope.child_scope()
-        # Normalize: builder may pass a single Assignment for one-binding lets
-        assignments = self.assignments
-        if not isinstance(assignments, (list, tuple)):
-            assignments = [assignments] if assignments is not None else []
-        for assignment in assignments:
+        for assignment in self.assignments:
             let_scope.define_variable(assignment.name.name, assignment)
             assignment.build_scope(let_scope)
         self.body.build_scope(let_scope)
@@ -1272,11 +1263,7 @@ class ListCompFor(VectorElement):
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         for_scope = parent_scope.child_scope()
-        # Normalize: builder may pass a single Assignment for one-variable loops
-        assignments = self.assignments
-        if not isinstance(assignments, (list, tuple)):
-            assignments = [assignments] if assignments is not None else []
-        for assignment in assignments:
+        for assignment in self.assignments:
             assignment.scope = for_scope
             for_scope.define_variable(assignment.name.name, assignment)
             assignment.name.build_scope(for_scope)
@@ -1297,34 +1284,27 @@ class ListCompCFor(VectorElement):
         [i*2 for (i=0; i<10; i=i+2)]   // With increment step
     
     Attributes:
-        initial: List of initialization assignments.
+        inits: List of initialization assignments.
         condition: The loop continuation condition.
-        increment: List of increment assignments.
+        incrs: List of increment assignments.
         body: The expression to evaluate for each iteration.
     """
-    initial: list[Assignment]
+    inits: list[Assignment]
     condition: Expression
-    increment: list[Assignment]
+    incrs: list[Assignment]
     body: VectorElement
 
     def __str__(self):
-        return f"for ({', '.join(str(a) for a in self.initial)}; {self.condition}; {', '.join(str(a) for a in self.increment)}) {self.body}"
+        return f"for ({', '.join(str(a) for a in self.inits)}; {self.condition}; {', '.join(str(a) for a in self.incrs)}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         for_scope = parent_scope.child_scope()
-        # Normalize: builder may pass single Assignments
-        initial = self.initial
-        if not isinstance(initial, (list, tuple)):
-            initial = [initial] if initial is not None else []
-        increment = self.increment
-        if not isinstance(increment, (list, tuple)):
-            increment = [increment] if increment is not None else []
-        for assignment in initial:
+        for assignment in self.inits:
             for_scope.define_variable(assignment.name.name, assignment)
             assignment.build_scope(for_scope)
         self.condition.build_scope(for_scope)
-        for assignment in increment:
+        for assignment in self.incrs:
             assignment.build_scope(for_scope)
         self.body.build_scope(for_scope)
 
@@ -1497,46 +1477,6 @@ class ModularFor(ModuleInstantiation):
 
 
 @dataclass
-class ModularCFor(ModuleInstantiation):
-    """Represents a C-style for loop module instantiation.
-    
-    C-style for loops have three parts: initialization, condition, and increment.
-    Similar to C/Java for loops: for (init; condition; increment) body
-    
-    Examples:
-        for (i=0; i<5; i=i+1) translate([i, 0, 0]) cube(1);
-        for (i=0; i<10; i=i+2) rotate([0, 0, i]) cube(1);
-    
-    Attributes:
-        initial: List of initialization assignments.
-        condition: The loop continuation condition.
-        increment: List of increment assignments.
-        body: The module instantiation to execute for each iteration.
-    """
-    initial: list[Assignment]
-    condition: Expression
-    increment: list[Assignment]
-    body: ModuleInstantiation
-
-    def __str__(self):
-        return f"for ({'; '.join(str(a) for a in self.initial)}; {self.condition}; {', '.join(str(a) for a in self.increment)}) {self.body}"
-
-    def build_scope(self, parent_scope: "Scope") -> None:
-        self.scope = parent_scope
-        for_scope = parent_scope.child_scope()
-        for assignment in self.initial:
-            for_scope.define_variable(assignment.name.name, assignment)
-            assignment.build_scope(for_scope)
-        self.condition.build_scope(for_scope)
-        for assignment in self.increment:
-            assignment.build_scope(for_scope)
-        body = self.body if isinstance(self.body, list) else [self.body]
-        _collect_hoisted_declarations(body, for_scope)
-        for node in body:
-            node.build_scope(for_scope)
-
-
-@dataclass
 class ModularIntersectionFor(ModuleInstantiation):
     """Represents an intersection_for loop module instantiation.
     
@@ -1564,52 +1504,6 @@ class ModularIntersectionFor(ModuleInstantiation):
             for_scope.define_variable(assignment.name.name, assignment)
             assignment.name.build_scope(for_scope)
             assignment.expr.build_scope(parent_scope)
-        body = self.body if isinstance(self.body, list) else [self.body]
-        _collect_hoisted_declarations(body, for_scope)
-        for node in body:
-            node.build_scope(for_scope)
-
-
-@dataclass
-class ModularIntersectionCFor(ModuleInstantiation):
-    """Represents an intersection_for C-style loop module instantiation.
-
-    Similar to a C-style for loop, but computes the intersection of all
-    iterations rather than the union. Used for creating complex intersections
-    that use explicit initialization, condition, and increment.
-
-    Examples:
-        intersection_for(i = 0; i < 3; i = i + 1) rotate([0,0,i*90]) cube(10);
-
-    Attributes:
-        initial: List of initialization assignments.
-        condition: The loop continuation condition.
-        increment: List of increment assignments.
-        body: The module instantiation to execute for each iteration.
-    """
-    initial: list[Assignment]
-    condition: Expression
-    increment: list[Assignment]
-    body: ModuleInstantiation
-
-    def __str__(self):
-        return (
-            f"intersection_for ("
-            f"{'; '.join(str(a) for a in self.initial)}; "
-            f"{self.condition}; "
-            f"{', '.join(str(a) for a in self.increment)}"
-            f") {self.body}"
-        )
-
-    def build_scope(self, parent_scope: "Scope") -> None:
-        self.scope = parent_scope
-        for_scope = parent_scope.child_scope()
-        for assignment in self.initial:
-            for_scope.define_variable(assignment.name.name, assignment)
-            assignment.build_scope(for_scope)
-        self.condition.build_scope(for_scope)
-        for assignment in self.increment:
-            assignment.build_scope(for_scope)
         body = self.body if isinstance(self.body, list) else [self.body]
         _collect_hoisted_declarations(body, for_scope)
         for node in body:

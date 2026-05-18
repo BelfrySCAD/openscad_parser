@@ -5,12 +5,12 @@ from openscad_parser.ast import (
     Assignment, FunctionDeclaration, ModuleDeclaration,
     ModularCall, ModularFor, ModularIf, ModularIfElse,
     ModularLet, LetOp, FunctionLiteral, Identifier,
-    ModularCFor, ModularEcho, ModularAssert,
+    ModularEcho, ModularAssert,
     ModularModifierShowOnly, ModularModifierHighlight,
     ModularModifierBackground, ModularModifierDisable,
     ListComprehension, ListCompFor, ListCompCFor, ListCompLet,
     ListCompIf, ListCompIfElse, ListCompEach,
-    ModularIntersectionFor, ModularIntersectionCFor,
+    ModularIntersectionFor,
     EchoOp, AssertOp,
     DivisionOp, ModuloOp, ExponentOp,
     BitwiseAndOp, BitwiseOrOp, BitwiseNotOp,
@@ -386,27 +386,6 @@ class TestModularConstructs:
         build_scopes(ast)
         for_node = ast[0]
         assert isinstance(for_node, ModularFor)
-        body = for_node.body
-        first = body[0] if isinstance(body, list) else body
-        assert first.scope.lookup_variable("i") is not None  # type: ignore
-
-    def test_modular_c_for(self):
-        """ModularCFor creates scope with loop variable."""
-        ast = getASTfromString("for (i = 0; i < 3; i = i + 1) cube(i);")
-        assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-        for_node = ast[0]
-        assert isinstance(for_node, ModularCFor)
-        body = for_node.body[0] if isinstance(for_node.body, list) else for_node.body
-        assert body.scope.lookup_variable("i") is not None  # type: ignore
-
-    def test_modular_c_for_block_body(self):
-        """ModularCFor with statement block (list body)."""
-        ast = getASTfromString("for (i = 0; i < 3; i = i + 1) { cube(i); sphere(i); }")
-        assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-        for_node = ast[0]
-        assert isinstance(for_node, ModularCFor)
         body = for_node.body
         first = body[0] if isinstance(body, list) else body
         assert first.scope.lookup_variable("i") is not None  # type: ignore
@@ -861,7 +840,7 @@ class TestExpressionOpBuildScope:
 
 
 class TestIntersectionForBuildScope:
-    """Tests that ModularIntersectionFor and ModularIntersectionCFor propagate scope."""
+    """Tests that ModularIntersectionFor propagates scope."""
 
     def test_modular_intersection_for_scope(self):
         ast = getASTfromString("intersection_for (i = [0:2]) cube(i);")
@@ -879,25 +858,6 @@ class TestIntersectionForBuildScope:
         build_scopes(ast)
         node = ast[0]
         assert isinstance(node, ModularIntersectionFor)
-        body = node.body[0] if isinstance(node.body, list) else node.body
-        assert body.scope.lookup_variable("i") is not None
-
-    def test_modular_intersection_c_for_scope(self):
-        ast = getASTfromString("intersection_for (i = 0; i < 3; i = i + 1) cube(i);")
-        assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-        node = ast[0]
-        assert isinstance(node, ModularIntersectionCFor)
-        body = node.body[0] if isinstance(node.body, list) else node.body
-        assert body.scope is not None
-        assert body.scope.lookup_variable("i") is not None
-
-    def test_modular_intersection_c_for_block_body(self):
-        ast = getASTfromString("intersection_for (i = 0; i < 3; i = i + 1) { cube(i); sphere(i); }")
-        assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-        node = ast[0]
-        assert isinstance(node, ModularIntersectionCFor)
         body = node.body[0] if isinstance(node.body, list) else node.body
         assert body.scope.lookup_variable("i") is not None
 

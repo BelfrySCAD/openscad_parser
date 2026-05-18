@@ -5,11 +5,11 @@ from openscad_parser import getOpenSCADParser
 from openscad_parser.ast.builder import ASTBuilderVisitor, Position, SemanticChildren
 from openscad_parser.ast.source_map import SourceMap
 from openscad_parser.ast.nodes import (
-    Identifier, StringLiteral, NumberLiteral, BooleanLiteral, UndefinedLiteral,
+    Identifier, StringLiteral, NumberLiteral, UndefinedLiteral,
     ModuleDeclaration, FunctionDeclaration, UseStatement, IncludeStatement,
     Assignment, LetOp, AssertOp, EchoOp, TernaryOp, Expression,
-    PrimaryCall, ModularCall, ModularFor, ModularCFor, ModularLet, ModularEcho,
-    ModularAssert, ModularIntersectionFor, ModularIntersectionCFor,
+    PrimaryCall, ModularCall, ModularFor, ModularLet, ModularEcho,
+    ModularAssert, ModularIntersectionFor,
     ListComprehension, BitwiseNotOp, LogicalNotOp, CommentLine, CommentSpan,
     MultiplicationOp, UnaryMinusOp, PositionalArgument
 )
@@ -527,13 +527,6 @@ class TestASTBuilderVisitorEdgeCases:
         assert mod_for.body == [call]
 
         num = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        sc_c_for = SemanticChildren([assignment, num, assignment, call], {"child_statement": [[call]]})
-        mod_c_for = visitor.visit_modular_c_for(None, sc_c_for)
-        assert isinstance(mod_c_for, ModularCFor)
-        assert mod_c_for.initial == [assignment]
-        assert mod_c_for.increment == [assignment]
-        assert mod_c_for.body == [call]
-
         sc_let = SemanticChildren([assignment, call], {"child_statement": [[call]]})
         mod_let = visitor.visit_modular_let(None, sc_let)
         assert isinstance(mod_let, ModularLet)
@@ -567,23 +560,6 @@ class TestASTBuilderVisitorEdgeCases:
         mod_for = visitor.visit_modular_intersection_for(None, sc)
         assert isinstance(mod_for, ModularIntersectionFor)
         assert mod_for.assignments == [assignment]
-
-    def test_visit_modular_intersection_c_for_normalizes_lists(self):
-        """Test modular_intersection_c_for wraps init/increment into lists."""
-        parser = getOpenSCADParser()
-        visitor = ASTBuilderVisitor(parser)
-        assignment = Assignment(name=Identifier(name="i", position=Position("", 1, 1)),
-                               expr=NumberLiteral(val=1.0, position=Position("", 1, 1)),
-                               position=Position("", 1, 1))
-        condition = BooleanLiteral(val=True, position=Position("", 1, 1))
-        call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
-                           arguments=[], children=[], position=Position("", 1, 1))
-
-        sc = SemanticChildren([assignment, condition, assignment, call], {"child_statement": [[call]]})
-        mod_c_for = visitor.visit_modular_intersection_c_for(None, sc)
-        assert isinstance(mod_c_for, ModularIntersectionCFor)
-        assert mod_c_for.initial == [assignment]
-        assert mod_c_for.increment == [assignment]
 
     def test_visit_modular_call_name_coercion(self):
         """Test modular_call coerces non-Identifier name to Identifier."""

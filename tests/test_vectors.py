@@ -3,7 +3,7 @@
 import pytest
 from tests.conftest import parse_success
 from openscad_parser.ast import getASTfromString
-from openscad_parser.ast.nodes import Assignment, ListComprehension, ListCompFor
+from openscad_parser.ast.nodes import Assignment, ListComprehension, ListCompFor, ListCompCFor, ListCompLet
 
 
 class TestVectors:
@@ -193,6 +193,136 @@ class TestListComprehensionComplex:
         assert isinstance(comp, ListComprehension)
         assert len(comp.elements) == 1
         assert isinstance(comp.elements[0], ListCompFor)
+
+
+def _lc_cfor(code):
+    """Parse a list-comprehension c-for from 'x = [<code>];' and return the ListCompCFor node."""
+    ast = getASTfromString(f"x = [{code}];")
+    node = ast[0].expr.elements[0]
+    assert isinstance(node, ListCompCFor)
+    return node
+
+
+class TestListCompCFor:
+    """Test C-style for loop list comprehension AST: inits and incrs are always list[Assignment]."""
+
+    # --- inits counts ---
+
+    def test_zero_inits(self):
+        cfor = _lc_cfor("for ( ; i < 5 ; i = i + 1) i")
+        assert cfor.inits == []
+        assert isinstance(cfor.inits, list)
+
+    def test_one_init(self):
+        cfor = _lc_cfor("for (i = 0 ; i < 5 ; i = i + 1) i")
+        assert len(cfor.inits) == 1
+        assert isinstance(cfor.inits, list)
+        assert all(isinstance(a, Assignment) for a in cfor.inits)
+
+    def test_two_inits(self):
+        cfor = _lc_cfor("for (i = 0, j = 1 ; i < 5 ; i = i + 1) i")
+        assert len(cfor.inits) == 2
+        assert isinstance(cfor.inits, list)
+        assert all(isinstance(a, Assignment) for a in cfor.inits)
+
+    def test_three_inits(self):
+        cfor = _lc_cfor("for (i = 0, j = 1, k = 2 ; i < 5 ; i = i + 1) i")
+        assert len(cfor.inits) == 3
+        assert isinstance(cfor.inits, list)
+        assert all(isinstance(a, Assignment) for a in cfor.inits)
+
+    # --- incrs counts ---
+
+    def test_zero_incrs(self):
+        cfor = _lc_cfor("for (i = 0 ; i < 5 ; ) i")
+        assert cfor.incrs == []
+        assert isinstance(cfor.incrs, list)
+
+    def test_one_incr(self):
+        cfor = _lc_cfor("for (i = 0 ; i < 5 ; i = i + 1) i")
+        assert len(cfor.incrs) == 1
+        assert isinstance(cfor.incrs, list)
+        assert all(isinstance(a, Assignment) for a in cfor.incrs)
+
+    def test_two_incrs(self):
+        cfor = _lc_cfor("for (i = 0 ; i < 5 ; i = i + 1, j = i * 2) i")
+        assert len(cfor.incrs) == 2
+        assert isinstance(cfor.incrs, list)
+        assert all(isinstance(a, Assignment) for a in cfor.incrs)
+
+    def test_three_incrs(self):
+        cfor = _lc_cfor("for (i = 0 ; i < 5 ; i = i + 1, j = i * 2, k = 3) i")
+        assert len(cfor.incrs) == 3
+        assert isinstance(cfor.incrs, list)
+        assert all(isinstance(a, Assignment) for a in cfor.incrs)
+
+    # --- both zero ---
+
+    def test_both_zero(self):
+        cfor = _lc_cfor("for ( ; i < 5 ; ) i")
+        assert cfor.inits == []
+        assert cfor.incrs == []
+
+
+
+def _lc_for(code):
+    """Parse a list-comprehension for from 'x = [<code>];' and return the ListCompFor node."""
+    ast = getASTfromString(f"x = [{code}];")
+    node = ast[0].expr.elements[0]
+    assert isinstance(node, ListCompFor)
+    return node
+
+
+def _lc_let(code):
+    """Parse a list-comprehension let from 'x = [<code>];' and return the ListCompLet node."""
+    ast = getASTfromString(f"x = [{code}];")
+    node = ast[0].expr.elements[0]
+    assert isinstance(node, ListCompLet)
+    return node
+
+
+class TestListCompFor:
+    """Test ListCompFor.assignments is always list[Assignment]."""
+
+    def test_one_assignment(self):
+        lc = _lc_for("for (i = [0:5]) i")
+        assert len(lc.assignments) == 1
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
+
+    def test_two_assignments(self):
+        lc = _lc_for("for (i = [0:5], j = [0:3]) i + j")
+        assert len(lc.assignments) == 2
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
+
+    def test_three_assignments(self):
+        lc = _lc_for("for (i = [0:5], j = [0:3], k = [0:2]) i + j + k")
+        assert len(lc.assignments) == 3
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
+
+
+class TestListCompLet:
+    """Test ListCompLet.assignments is always list[Assignment]."""
+
+    def test_one_assignment(self):
+        lc = _lc_let("let(a = 1) for (i = [0:3]) a + i")
+        assert len(lc.assignments) == 1
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
+
+    def test_two_assignments(self):
+        lc = _lc_let("let(a = 1, b = 2) for (i = [0:3]) a + b + i")
+        assert len(lc.assignments) == 2
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
+
+    def test_three_assignments(self):
+        lc = _lc_let("let(a = 1, b = 2, c = 3) for (i = [0:3]) a + b + c + i")
+        assert len(lc.assignments) == 3
+        assert isinstance(lc.assignments, list)
+        assert all(isinstance(a, Assignment) for a in lc.assignments)
 
 
 class TestVectorOperations:

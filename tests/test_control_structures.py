@@ -66,15 +66,6 @@ class TestFor:
         code = "for (i = [0:5]) { translate([i, 0, 0]) cube(1); }"
         parse_success(parser, code)
 
-    def test_for_c_style(self, parser):
-        """Test C-style for loop."""
-        code = "for (i = 0; i < 10; i = i + 1) cube(1);"
-        parse_success(parser, code)
-
-    def test_for_c_style_with_block(self, parser):
-        """Test C-style for loop with block."""
-        code = "for (i = 0; i < 10; i = i + 1) { cube(1); }"
-        parse_success(parser, code)
 
 
 class TestIntersectionFor:

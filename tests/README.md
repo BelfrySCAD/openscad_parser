@@ -19,6 +19,9 @@ The test suite is organized into the following modules:
 - **test_ast_convenience.py**: Tests for convenience functions (getASTfromString, getASTfromFile, etc.)
 - **test_builder.py**: Tests for the AST builder functionality
 - **test_nodes.py**: Tests for AST node types and their properties
+- **test_scope.py**: Tests for lexical scope building and namespace resolution
+- **test_pretty_print.py**: Tests for the pretty-printer (AST to OpenSCAD source round-trips)
+- **test_cli.py**: Tests for the command-line interface
 - **test_serialization.py**: Tests for JSON and YAML serialization/deserialization of AST trees
 - **test_source_map.py**: Tests for source position tracking and source maps
 

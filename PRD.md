@@ -141,7 +141,7 @@ from openscad_parser.ast import parse_ast
 - Efficient source map lookups
 
 ### Reliability
-- Comprehensive test suite (~200+ tests)
+- Comprehensive test suite (~850+ tests)
 - Tests organized by language feature
 - No known parsing failures for valid OpenSCAD code
 

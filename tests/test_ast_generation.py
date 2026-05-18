@@ -16,7 +16,7 @@ from openscad_parser.ast import (
     FunctionLiteral, PrimaryCall, PrimaryIndex, PrimaryMember,
     ModuleDeclaration, FunctionDeclaration,
     UseStatement, IncludeStatement,
-    ModularCall, ModularFor, ModularCFor, ModularIntersectionFor, ModularIntersectionCFor,
+    ModularCall, ModularFor, ModularIntersectionFor,
     ModularLet, ModularEcho, ModularAssert,
     ModularIf, ModularIfElse,
     ModularModifierShowOnly, ModularModifierHighlight, ModularModifierBackground, ModularModifierDisable,
@@ -27,7 +27,7 @@ from openscad_parser.ast import (
 
 
 # Import the public parse_ast function from ast module
-from openscad_parser.ast import parse_ast
+from openscad_parser.ast import parse_ast, getASTfromString
 
 
 class TestLiteralASTNodes:
@@ -528,6 +528,95 @@ class TestFunctionCallASTNodes:
         assert assignment.expr.member.name == "member"
 
 
+class TestPrimaryCallArguments:
+    """arguments is always list[Argument] for PrimaryCall."""
+
+    def test_zero_args(self):
+        node = _getast("x = f();").expr
+        assert isinstance(node, PrimaryCall)
+        assert node.arguments == []
+        assert isinstance(node.arguments, list)
+
+    def test_one_positional(self):
+        node = _getast("x = f(1);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 1
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_two_positional(self):
+        node = _getast("x = f(1, 2);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_three_positional(self):
+        node = _getast("x = f(1, 2, 3);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 3
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_one_named(self):
+        node = _getast("x = f(a=1);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 1
+        assert isinstance(node.arguments[0], NamedArgument)
+
+    def test_two_named(self):
+        node = _getast("x = f(a=1, b=2);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, NamedArgument) for a in node.arguments)
+
+    def test_mixed(self):
+        node = _getast("x = f(1, b=2);").expr
+        assert isinstance(node, PrimaryCall)
+        assert len(node.arguments) == 2
+        assert isinstance(node.arguments[0], PositionalArgument)
+        assert isinstance(node.arguments[1], NamedArgument)
+
+
+class TestListComprehensionElements:
+    """elements is always list[VectorElement] for ListComprehension."""
+
+    def test_zero_elements(self):
+        node = _getast("x = [];").expr
+        assert isinstance(node, ListComprehension)
+        assert node.elements == []
+        assert isinstance(node.elements, list)
+
+    def test_one_element(self):
+        node = _getast("x = [1];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 1
+
+    def test_two_elements(self):
+        node = _getast("x = [1, 2];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 2
+
+    def test_three_elements(self):
+        node = _getast("x = [1, 2, 3];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 3
+
+    def test_one_for_element(self):
+        node = _getast("x = [for (i = [0:3]) i];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 1
+        assert isinstance(node.elements[0], ListCompFor)
+
+    def test_two_for_elements(self):
+        node = _getast("x = [for (i = [0:3]) i, for (j = [0:2]) j];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 2
+        assert all(isinstance(e, ListCompFor) for e in node.elements)
+
+    def test_mixed_elements(self):
+        node = _getast("x = [1, for (i = [0:2]) i, 3];").expr
+        assert isinstance(node, ListComprehension)
+        assert len(node.elements) == 3
+
+
 class TestControlStructureASTNodes:
     """Test AST generation for control structures."""
 
@@ -567,6 +656,53 @@ class TestControlStructureASTNodes:
         assert isinstance(assignment.expr, AssertOp)
         assert len(assignment.expr.arguments) >= 1
         assert isinstance(assignment.expr.body, NumberLiteral)
+
+
+class TestModularCallArguments:
+    """arguments is always list[Argument] for ModularCall."""
+
+    def test_zero_args(self):
+        node = _getast("cube();")
+        assert isinstance(node, ModularCall)
+        assert node.arguments == []
+        assert isinstance(node.arguments, list)
+
+    def test_one_positional(self):
+        node = _getast("cube(10);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 1
+        assert isinstance(node.arguments[0], PositionalArgument)
+
+    def test_two_positional(self):
+        node = _getast("foo(1, 2);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, PositionalArgument) for a in node.arguments)
+
+    def test_three_positional(self):
+        node = _getast("foo(1, 2, 3);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 3
+        assert all(isinstance(a, PositionalArgument) for a in node.arguments)
+
+    def test_one_named(self):
+        node = _getast("translate(v=[1,0,0]);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 1
+        assert isinstance(node.arguments[0], NamedArgument)
+
+    def test_two_named(self):
+        node = _getast("cube(size=10, center=true);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, NamedArgument) for a in node.arguments)
+
+    def test_mixed(self):
+        node = _getast("foo(1, b=2);")
+        assert isinstance(node, ModularCall)
+        assert len(node.arguments) == 2
+        assert isinstance(node.arguments[0], PositionalArgument)
+        assert isinstance(node.arguments[1], NamedArgument)
 
 
 class TestModuleASTNodes:
@@ -878,6 +1014,7 @@ class TestModuleASTNodes:
         assert isinstance(for_stmt.body[0], ModularCall)
 
     def test_modular_if_ast(self, parser):
+
         """Test ModularIf AST node generation."""
         code = "if (true) cube(10);"
         ast = parse_ast(parser, code)
@@ -928,6 +1065,146 @@ class TestModuleASTNodes:
         ast = parse_ast(parser, code)
         modifier = ast[0] if isinstance(ast, list) else ast
         assert isinstance(modifier, ModularModifierDisable)
+
+
+def _getast(code):
+    ast = getASTfromString(code)
+    return ast[0]
+
+
+class TestLetAssignments:
+    """assignments is always list[Assignment] for let/for nodes."""
+
+    # --- LetOp (expression-level let) ---
+
+    def test_let_op_zero(self):
+        node = _getast("x = let() 5;").expr
+        assert isinstance(node, LetOp)
+        assert node.assignments == []
+        assert isinstance(node.assignments, list)
+
+    def test_let_op_one(self):
+        node = _getast("x = let(a=1) a;").expr
+        assert isinstance(node, LetOp)
+        assert len(node.assignments) == 1
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_let_op_two(self):
+        node = _getast("x = let(a=1, b=2) a+b;").expr
+        assert isinstance(node, LetOp)
+        assert len(node.assignments) == 2
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_let_op_three(self):
+        node = _getast("x = let(a=1, b=2, c=3) a+b+c;").expr
+        assert isinstance(node, LetOp)
+        assert len(node.assignments) == 3
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    # --- ModularLet (statement-level let) ---
+
+    def test_modular_let_zero(self):
+        node = _getast("let() cube(1);")
+        assert isinstance(node, ModularLet)
+        assert node.assignments == []
+        assert isinstance(node.assignments, list)
+
+    def test_modular_let_one(self):
+        node = _getast("let(x=1) cube(x);")
+        assert isinstance(node, ModularLet)
+        assert len(node.assignments) == 1
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_let_two(self):
+        node = _getast("let(x=1, y=2) cube(x);")
+        assert isinstance(node, ModularLet)
+        assert len(node.assignments) == 2
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_let_three(self):
+        node = _getast("let(x=1, y=2, z=3) cube(x);")
+        assert isinstance(node, ModularLet)
+        assert len(node.assignments) == 3
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    # --- ModularFor ---
+
+    def test_modular_for_one(self):
+        node = _getast("for (i=[0:3]) cube(i);")
+        assert isinstance(node, ModularFor)
+        assert len(node.assignments) == 1
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_for_two(self):
+        node = _getast("for (i=[0:3], j=[0:2]) cube(i);")
+        assert isinstance(node, ModularFor)
+        assert len(node.assignments) == 2
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_for_three(self):
+        node = _getast("for (i=[0:3], j=[0:2], k=[0:1]) cube(i);")
+        assert isinstance(node, ModularFor)
+        assert len(node.assignments) == 3
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    # --- ModularIntersectionFor ---
+
+    def test_modular_intersection_for_one(self):
+        node = _getast("intersection_for (i=[0:3]) cube(i);")
+        assert isinstance(node, ModularIntersectionFor)
+        assert len(node.assignments) == 1
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_intersection_for_two(self):
+        node = _getast("intersection_for (i=[0:3], j=[0:2]) cube(i);")
+        assert isinstance(node, ModularIntersectionFor)
+        assert len(node.assignments) == 2
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+    def test_modular_intersection_for_three(self):
+        node = _getast("intersection_for (i=[0:3], j=[0:2], k=[0:1]) cube(i);")
+        assert isinstance(node, ModularIntersectionFor)
+        assert len(node.assignments) == 3
+        assert all(isinstance(a, Assignment) for a in node.assignments)
+
+
+class TestModuleDeclarationChildren:
+    """children is always list for ModuleDeclaration."""
+
+    def test_zero_children(self):
+        node = _getast("module foo() {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert node.children == []
+        assert isinstance(node.children, list)
+
+    def test_one_child(self):
+        node = _getast("module foo() { cube(1); }")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.children) == 1
+        assert isinstance(node.children[0], ModularCall)
+
+    def test_two_children(self):
+        node = _getast("module foo() { cube(1); sphere(1); }")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.children) == 2
+        assert all(isinstance(c, ModularCall) for c in node.children)
+
+    def test_three_children(self):
+        node = _getast("module foo() { cube(1); sphere(1); cylinder(1); }")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.children) == 3
+        assert all(isinstance(c, ModularCall) for c in node.children)
+
+    def test_empty_statement_body(self):
+        node = _getast("module foo() ;")
+        assert isinstance(node, ModuleDeclaration)
+        assert node.children == []
+
+    def test_single_statement_body(self):
+        node = _getast("module foo() cube(10);")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.children) == 1
+        assert isinstance(node.children[0], ModularCall)
 
 
 class TestFunctionASTNodes:
@@ -1056,6 +1333,182 @@ class TestFunctionASTNodes:
         assert assignment.expr is not None
         assert isinstance(assignment.expr, FunctionLiteral)
         assert isinstance(assignment.expr.body, MultiplicationOp)
+
+
+class TestDeclarationParameters:
+    """parameters is always list[ParameterDeclaration] for module/function declarations."""
+
+    # --- ModuleDeclaration ---
+
+    def test_module_zero_params(self):
+        node = _getast("module foo() {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert node.parameters == []
+        assert isinstance(node.parameters, list)
+
+    def test_module_one_param(self):
+        node = _getast("module foo(a) {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.parameters) == 1
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_module_two_params(self):
+        node = _getast("module foo(a, b) {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.parameters) == 2
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_module_three_params(self):
+        node = _getast("module foo(a, b, c) {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_module_params_with_defaults(self):
+        node = _getast("module foo(a, b=2, c=3) {}")
+        assert isinstance(node, ModuleDeclaration)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    # --- FunctionDeclaration ---
+
+    def test_function_zero_params(self):
+        node = _getast("function f() = 1;")
+        assert isinstance(node, FunctionDeclaration)
+        assert node.parameters == []
+        assert isinstance(node.parameters, list)
+
+    def test_function_one_param(self):
+        node = _getast("function f(x) = x;")
+        assert isinstance(node, FunctionDeclaration)
+        assert len(node.parameters) == 1
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_two_params(self):
+        node = _getast("function f(x, y) = x + y;")
+        assert isinstance(node, FunctionDeclaration)
+        assert len(node.parameters) == 2
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_three_params(self):
+        node = _getast("function f(x, y, z) = x + y + z;")
+        assert isinstance(node, FunctionDeclaration)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_params_with_defaults(self):
+        node = _getast("function f(x, y=2, z=3) = x + y + z;")
+        assert isinstance(node, FunctionDeclaration)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    # --- FunctionLiteral ---
+
+    def test_function_literal_zero_params(self):
+        node = _getast("x = function() 1;").expr
+        assert isinstance(node, FunctionLiteral)
+        assert node.parameters == []
+        assert isinstance(node.parameters, list)
+
+    def test_function_literal_one_param(self):
+        node = _getast("x = function(a) a;").expr
+        assert isinstance(node, FunctionLiteral)
+        assert len(node.parameters) == 1
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_literal_two_params(self):
+        node = _getast("x = function(a, b) a + b;").expr
+        assert isinstance(node, FunctionLiteral)
+        assert len(node.parameters) == 2
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_literal_three_params(self):
+        node = _getast("x = function(a, b, c) a + b + c;").expr
+        assert isinstance(node, FunctionLiteral)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+    def test_function_literal_params_with_defaults(self):
+        node = _getast("x = function(a, b=2, c=3) a + b + c;").expr
+        assert isinstance(node, FunctionLiteral)
+        assert len(node.parameters) == 3
+        assert all(isinstance(p, ParameterDeclaration) for p in node.parameters)
+
+
+class TestEchoArguments:
+    """arguments is always list[Argument] for echo/assert nodes."""
+
+    # --- EchoOp (expression form) ---
+
+    def test_echo_op_zero(self):
+        node = _getast("x = echo() 5;").expr
+        assert isinstance(node, EchoOp)
+        assert node.arguments == []
+        assert isinstance(node.arguments, list)
+
+    def test_echo_op_one(self):
+        node = _getast("x = echo(1) 5;").expr
+        assert isinstance(node, EchoOp)
+        assert len(node.arguments) == 1
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_echo_op_two(self):
+        node = _getast("x = echo(1, 2) 5;").expr
+        assert isinstance(node, EchoOp)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_echo_op_three(self):
+        node = _getast("x = echo(1, 2, 3) 5;").expr
+        assert isinstance(node, EchoOp)
+        assert len(node.arguments) == 3
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    # --- ModularEcho (statement form) ---
+
+    def test_modular_echo_zero(self):
+        node = _getast("echo();")
+        assert isinstance(node, ModularEcho)
+        assert node.arguments == []
+        assert isinstance(node.arguments, list)
+
+    def test_modular_echo_one(self):
+        node = _getast("echo(1);")
+        assert isinstance(node, ModularEcho)
+        assert len(node.arguments) == 1
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_modular_echo_two(self):
+        node = _getast("echo(1, 2);")
+        assert isinstance(node, ModularEcho)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_modular_echo_three(self):
+        node = _getast("echo(1, 2, 3);")
+        assert isinstance(node, ModularEcho)
+        assert len(node.arguments) == 3
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    # --- ModularAssert (statement form) ---
+
+    def test_modular_assert_one(self):
+        node = _getast("assert(true);")
+        assert isinstance(node, ModularAssert)
+        assert len(node.arguments) == 1
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_modular_assert_two(self):
+        node = _getast("assert(true, \"msg\");")
+        assert isinstance(node, ModularAssert)
+        assert len(node.arguments) == 2
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
+
+    def test_modular_assert_three(self):
+        node = _getast("assert(true, \"a\", \"b\");")
+        assert isinstance(node, ModularAssert)
+        assert len(node.arguments) == 3
+        assert all(isinstance(a, (PositionalArgument, NamedArgument)) for a in node.arguments)
 
 
 class TestStatementASTNodes:

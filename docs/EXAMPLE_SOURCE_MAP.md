@@ -74,13 +74,14 @@ def parse_with_includes(main_file: str) -> list:
         for node in ast:
             if isinstance(node, IncludeStatement):
                 # Load included file
-                included_file = node.filename  # You'd extract this from the AST
+                included_file = node.filepath.val  # filepath is a StringLiteral
                 with open(included_file, 'r') as f:
                     included_content = f.read()
                 
                 # Insert at the position of the include statement
-                # (You'd need to track the position from the AST node)
-                include_pos = node.position.position
+                # (You'd need to track the byte offset in the combined string separately,
+                # as node.position provides origin/line/column, not a byte offset)
+                include_pos = ...  # byte offset in the combined string
                 source_map.add_origin(included_file, included_content, insert_at=include_pos)
     
     # Get combined string and re-parse

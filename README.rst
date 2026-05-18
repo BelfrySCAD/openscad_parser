@@ -387,7 +387,7 @@ Expressions
 - ``LetOp(assignments: list[Assignment], body: Expression)``: let clause  ``let(assignments) body``
 - ``EchoOp(arguments: list[Argument], body: Expression)``: echo clause  ``echo(arguments) body``
 - ``AssertOp(arguments: list[Argument], body: Expression)``: assert clause  ``assert(arguments) body``
-- ``FunctionLiteral(arguments: list[Argument], body: Expression)``: Anonymous function expression  ``function(arguments) body``
+- ``FunctionLiteral(parameters: list[ParameterDeclaration], body: Expression)``: Anonymous function expression  ``function(parameters) body``
 - ``PrimaryCall(left: Expression, arguments: list[Argument])``: Function calls  ``left(arguments)``
 - ``PrimaryIndex(left: Expression, index: Expression)``: Array indexing ``left[index]``
 - ``PrimaryMember(left: Expression, member: Identifier)``: Member access ``left.member``
@@ -397,10 +397,10 @@ List Comprehensions
 
 - ``ListComprehension(elements: list[VectorElement])``: Vector/list literals ``[elements]``
 - ``ListCompFor(assignments: list[Assignment], body: VectorElement)``: for loops in list comprehensions ``for(assignments) body``
-- ``ListCompCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: VectorElement)``: C-style for loops in list comprehensions ``for(initial; condition; increment) body``
+- ``ListCompCFor(inits: list[Assignment], condition: Expression, incrs: list[Assignment], body: VectorElement)``: C-style for loops in list comprehensions ``for(inits; condition; incrs) body``
 - ``ListCompIf(condition: Expression, true_expr: VectorElement)``: Conditional inclusion without else ``if(condition) true_expr``
 - ``ListCompIfElse(condition: Expression, true_expr: VectorElement, false_expr: VectorElement)``: Conditional inclusion with else ``if(condition) true_expr else false_expr``
-- ``ListCompLet(assignments: list[Assignment], body: Expression)``: let expressions in list comprehensions ``let(assignments) body``
+- ``ListCompLet(assignments: list[Assignment], body: VectorElement)``: let expressions in list comprehensions ``let(assignments) body``
 - ``ListCompEach(body: VectorElement)``: each expressions (flattens nested lists) ``each body``
 
 Module Instantiations
@@ -408,9 +408,7 @@ Module Instantiations
 
 - ``ModularCall(name: Identifier, arguments: list[Argument], children: list[ModuleInstantiation])``: Module calls ``name(arguments) { children }``
 - ``ModularFor(assignments: list[Assignment], body: ModuleInstantiation)``: for loops in module bodies ``for(assignments) body``
-- ``ModularCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style for loops in module bodies ``for(initial; condition; increment) body``
 - ``ModularIntersectionFor(assignments: list[Assignment], body: ModuleInstantiation)``: intersection_for loops ``intersection_for(assignments) body``
-- ``ModularIntersectionCFor(initial: list[Assignment], condition: Expression, increment: list[Assignment], body: ModuleInstantiation)``: C-style intersection_for loops ``intersection_for(initial; condition; increment) body``
 - ``ModularLet(assignments: list[Assignment], children: list[ModuleInstantiation])``: let statements in module bodies ``let(assignments) { children }``
 - ``ModularEcho(arguments: list[Argument], children: list[ModuleInstantiation])``: echo statements in module bodies ``echo(arguments) { children }``
 - ``ModularAssert(arguments: list[Argument], children: list[ModuleInstantiation])``: assert statements in module bodies ``assert(arguments) { children }``

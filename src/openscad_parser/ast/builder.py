@@ -6,6 +6,28 @@ from .source_map import SourceMap
 from .nodes import *
 
 
+class _CForParts:
+    """Wrapper returned by c_for_inits/c_for_incrs visitors.
+
+    Always truthy so Arpeggio does not drop it from parent children when
+    there are zero assignments, and not a list so Arpeggio does not flatten
+    it into the parent's children list.
+    """
+    __slots__ = ('_items',)
+
+    def __init__(self, items: list) -> None:
+        self._items = items
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __bool__(self) -> bool:  # pragma: no cover
+        return True
+
+
 @dataclass
 class Position:
     """Represents a location in a source origin.
@@ -1051,7 +1073,9 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return ListComprehension(elements=elements, position=self._get_node_position(node))
     
     def visit_funclit_def(self, node, children):
-        return FunctionLiteral(arguments=children[0], body=children[1], position=self._get_node_position(node))
+        parameters = [c for c in children if isinstance(c, ParameterDeclaration)]
+        body = next(c for c in children if not isinstance(c, ParameterDeclaration))
+        return FunctionLiteral(parameters=parameters, body=body, position=self._get_node_position(node))
     
     def visit_vector_elements(self, node, children):
         return list(children) if children else []
@@ -1066,24 +1090,43 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return children[0]
     
     def visit_listcomp_let(self, node, children):
-        return ListCompLet(assignments=children[0], body=children[1], position=self._get_node_position(node))
-    
+        body = children[-1]
+        assignments = [c for c in children[:-1] if isinstance(c, Assignment)]
+        return ListCompLet(assignments=assignments, body=body, position=self._get_node_position(node))
+
     def visit_listcomp_each(self, node, children):
         return ListCompEach(body=children[0], position=self._get_node_position(node))
-    
+
     def visit_listcomp_for(self, node, children):
+        body = children[-1]
+        assignments = [c for c in children[:-1] if isinstance(c, Assignment)]
         return ListCompFor(
-            assignments=children[0],
-            body=children[1],
+            assignments=assignments,
+            body=body,
             position=self._get_node_position(node)
         )
 
+    def visit_c_for_inits(self, node, children):
+        return _CForParts([a for a in children if isinstance(a, Assignment)])
+
+    def visit_c_for_incrs(self, node, children):
+        return _CForParts([a for a in children if isinstance(a, Assignment)])
+
     def visit_listcomp_c_for(self, node, children):
+        idx = 0
+        inits = list(children[idx]) if isinstance(children[idx], _CForParts) else []
+        if isinstance(children[idx], _CForParts):
+            idx += 1
+        condition = children[idx]; idx += 1
+        incrs = list(children[idx]) if idx < len(children) and isinstance(children[idx], _CForParts) else []
+        if idx < len(children) and isinstance(children[idx], _CForParts):
+            idx += 1
+        body = children[idx]
         return ListCompCFor(
-            initial=children[0],
-            condition=children[1],
-            increment=children[2],
-            body=children[3],
+            inits=inits,
+            condition=condition,
+            incrs=incrs,
+            body=body,
             position=self._get_node_position(node)
         )
     
@@ -1123,56 +1166,32 @@ class ASTBuilderVisitor(PTNodeVisitor):
             position=self._get_node_position(node)
         )
     
-    def visit_modular_c_for(self, node, children):
-        initial = children[0] if isinstance(children[0], list) else [children[0]]
-        increment = children[2] if isinstance(children[2], list) else [children[2]]
-        body = children.get_rule('child_statement')
-        return ModularCFor(
-            initial=initial,
-            condition=children[1],
-            increment=increment,
-            body=body,
-            position=self._get_node_position(node)
-        )
-    
     def visit_modular_for(self, node, children):
-        assignments = children[0] if isinstance(children[0], list) else [children[0]]
+        assignments = [c for c in children if isinstance(c, Assignment)]
         body = children.get_rule('child_statement')
         return ModularFor(
             assignments=assignments,
             body=body,
             position=self._get_node_position(node)
         )
-    
-    def visit_modular_intersection_c_for(self, node, children):
-        initial = children[0] if isinstance(children[0], list) else [children[0]]
-        increment = children[2] if isinstance(children[2], list) else [children[2]]
-        body = children.get_rule('child_statement')
-        return ModularIntersectionCFor(
-            initial=initial,
-            condition=children[1],
-            increment=increment,
-            body=body,
-            position=self._get_node_position(node)
-        )
 
     def visit_modular_intersection_for(self, node, children):
-        assignments = children[0] if isinstance(children[0], list) else [children[0]]
+        assignments = [c for c in children if isinstance(c, Assignment)]
         body = children.get_rule('child_statement')
         return ModularIntersectionFor(assignments=assignments, body=body, position=self._get_node_position(node))
-    
+
     def visit_modular_let(self, node, children):
-        assignments = children[0] if isinstance(children[0], list) else [children[0]]
+        assignments = [c for c in children if isinstance(c, Assignment)]
         mods = children.get_rule('child_statement')
         return ModularLet(assignments=assignments, children=mods, position=self._get_node_position(node))
     
     def visit_modular_echo(self, node, children):
-        arguments = children[0] if isinstance(children[0], list) else [children[0]]
+        arguments = [c for c in children if isinstance(c, Argument)]
         mods = children.get_rule('child_statement')
         return ModularEcho(arguments=arguments, children=mods, position=self._get_node_position(node))
-    
+
     def visit_modular_assert(self, node, children):
-        arguments = children[0] if isinstance(children[0], list) else [children[0]]
+        arguments = [c for c in children if isinstance(c, Argument)]
         mods = children.get_rule('child_statement')
         return ModularAssert(arguments=arguments, children=mods, position=self._get_node_position(node))
     

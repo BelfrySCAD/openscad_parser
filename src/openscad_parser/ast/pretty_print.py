@@ -4,8 +4,8 @@ from .nodes import (
     ASTNode, Assignment, FunctionDeclaration, ModuleDeclaration,
     UseStatement, IncludeStatement,
     ModuleInstantiation,
-    ModularCall, ModularFor, ModularCFor,
-    ModularIntersectionFor, ModularIntersectionCFor,
+    ModularCall, ModularFor,
+    ModularIntersectionFor,
     ModularLet, ModularEcho, ModularAssert,
     ModularIf, ModularIfElse,
     ModularModifierShowOnly, ModularModifierHighlight,
@@ -129,19 +129,9 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         assigns = _join_str(_as_list(node.assignments))
         return f"{pad}{prefix}for ({assigns})" + _fmt_child(node.body, indent, w)
 
-    if isinstance(node, ModularCFor):
-        init = _join_str(_as_list(node.initial))
-        inc = _join_str(_as_list(node.increment))
-        return f"{pad}{prefix}for ({init}; {node.condition}; {inc})" + _fmt_child(node.body, indent, w)
-
     if isinstance(node, ModularIntersectionFor):
         assigns = _join_str(_as_list(node.assignments))
         return f"{pad}{prefix}intersection_for ({assigns})" + _fmt_child(node.body, indent, w)
-
-    if isinstance(node, ModularIntersectionCFor):
-        init = _join_str(_as_list(node.initial))
-        inc = _join_str(_as_list(node.increment))
-        return f"{pad}{prefix}intersection_for ({init}; {node.condition}; {inc})" + _fmt_child(node.body, indent, w)
 
     if isinstance(node, ModularLet):
         assigns = _join_str(_as_list(node.assignments))

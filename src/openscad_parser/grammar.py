@@ -384,9 +384,7 @@ def ifelse_statement():
 
 def single_module_instantiation():
     return [
-            modular_c_for,
             modular_for,
-            modular_intersection_c_for,
             modular_intersection_for,
             modular_let,
             modular_assert,
@@ -409,36 +407,16 @@ def modular_for():
     return (KWD_FOR, TOK_PAREN, assignments_expr, TOK_ENDPAREN, child_statement)
 
 
-def modular_c_for():
-    return (
-        KWD_FOR,
-        TOK_PAREN,
-        assignments_expr,
-        TOK_SEMICOLON,
-        expr,
-        TOK_SEMICOLON,
-        assignments_expr,
-        TOK_ENDPAREN,
-        child_statement
-    )
+def c_for_inits():
+    return assignments_expr
+
+
+def c_for_incrs():
+    return assignments_expr
 
 
 def modular_intersection_for():
     return (KWD_INTERSECTION_FOR, TOK_PAREN, assignments_expr, TOK_ENDPAREN, child_statement)
-
-
-def modular_intersection_c_for():
-    return (
-        KWD_INTERSECTION_FOR,
-        TOK_PAREN,
-        assignments_expr,
-        TOK_SEMICOLON,
-        expr,
-        TOK_SEMICOLON,
-        assignments_expr,
-        TOK_ENDPAREN,
-        child_statement
-    )
 
 
 def modular_let():
@@ -686,7 +664,7 @@ def listcomp_for():
 
 
 def listcomp_c_for():
-    return (KWD_FOR, TOK_PAREN, assignments_expr, TOK_SEMICOLON, expr, TOK_SEMICOLON, assignments_expr, TOK_ENDPAREN, vector_element)
+    return (KWD_FOR, TOK_PAREN, c_for_inits, TOK_SEMICOLON, expr, TOK_SEMICOLON, c_for_incrs, TOK_ENDPAREN, vector_element)
 
 
 def listcomp_ifonly():

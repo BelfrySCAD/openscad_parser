@@ -55,9 +55,7 @@ from openscad_parser.ast.nodes import (
     ListComprehension,
     ModularCall,
     ModularFor,
-    ModularCFor,
     ModularIntersectionFor,
-    ModularIntersectionCFor,
     ModularLet,
     ModularEcho,
     ModularAssert,
@@ -160,11 +158,12 @@ def test_operator_str():
 
 
 def test_primary_and_range_str():
-    args = [PositionalArgument(expr=_num(3.0), position=_pos())]
-    func_lit = FunctionLiteral(arguments=args, body=_num(4.0), position=_pos())
-    assert str(func_lit) == "function(3.0) 4.0"
+    param = ParameterDeclaration(name=_ident("x"), default=None, position=_pos())
+    func_lit = FunctionLiteral(parameters=[param], body=_num(4.0), position=_pos())
+    assert str(func_lit) == "function(x) 4.0"
 
-    call = PrimaryCall(left=_ident("foo"), arguments=args, position=_pos())
+    call_args = [PositionalArgument(expr=_num(3.0), position=_pos())]
+    call = PrimaryCall(left=_ident("foo"), arguments=call_args, position=_pos())
     assert str(call) == "foo(3.0)"
 
     idx = PrimaryIndex(left=_ident("arr"), index=_num(1.0), position=_pos())
@@ -191,9 +190,9 @@ def test_list_comprehension_str():
     assert "i = 0.0" in str(list_for)
 
     list_c_for = ListCompCFor(
-        initial=[assign],
+        inits=[assign],
         condition=_num(1.0),
-        increment=[assign],
+        incrs=[assign],
         body=_num(4.0),
         position=_pos(),
     )
@@ -220,14 +219,8 @@ def test_modular_and_declaration_str():
     mod_for = ModularFor(assignments=[assign], body=mod_call, position=_pos())
     assert str(mod_for).startswith("for (")
 
-    mod_c_for = ModularCFor(initial=[assign], condition=_num(1.0), increment=[assign], body=mod_call, position=_pos())
-    assert "for (" in str(mod_c_for)
-
     mod_int_for = ModularIntersectionFor(assignments=[assign], body=mod_call, position=_pos())
     assert str(mod_int_for).startswith("intersection_for")
-
-    mod_int_c_for = ModularIntersectionCFor(initial=[assign], condition=_num(1.0), increment=[assign], body=mod_call, position=_pos())
-    assert "intersection_for (" in str(mod_int_c_for)
 
     mod_let = ModularLet(assignments=[assign], children=[mod_call], position=_pos())
     assert "let (" in str(mod_let)

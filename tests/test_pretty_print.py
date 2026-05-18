@@ -121,11 +121,6 @@ class TestFormatting:
         assert "for (" in out
         assert " {\n" in out
 
-    def test_for_c_style(self):
-        out = _fmt("for(i=0;i<5;i=i+1) cube(i);")
-        assert "for (" in out
-        assert ";" in out
-
     def test_for_roundtrip(self):
         code = "for (i = [0:3]) cube(i);"
         ast2 = _roundtrip(code)
@@ -279,11 +274,6 @@ class TestIntersectionForFormatting:
         out = _fmt("intersection_for(i=[0:3]){cube(i);sphere(i);}")
         assert "intersection_for (" in out
         assert " {\n" in out
-
-    def test_intersection_c_for(self):
-        out = _fmt("intersection_for(i=0;i<3;i=i+1) cube(i);")
-        assert "intersection_for (" in out
-        assert ";" in out
 
     def test_intersection_for_roundtrip(self):
         from openscad_parser.ast.nodes import ModularIntersectionFor

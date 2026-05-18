@@ -87,9 +87,7 @@ The following constructs **DO** create new variable scopes:
 | If statement | `ModularIf` | True branch only |
 | If-else statement | `ModularIfElse` | Each branch creates separate scope |
 | For loop (statement) | `ModularFor` | Loop variables + body |
-| C-style for (statement) | `ModularCFor` | Loop variables + body |
 | Intersection for | `ModularIntersectionFor` | Loop variables + body |
-| C-style intersection for | `ModularIntersectionCFor` | Loop variables + body |
 | Module instantiation children | `ModularCall` (children) | Children of a module call |
 | For loop (list comprehensions) | `ListCompFor` | Loop variables + body |
 | C-style for (list comprehensions) | `ListCompCFor` | Loop variables + body |
@@ -284,7 +282,7 @@ Modular sub-blocks include:
 - Top-level file scope
 - Module declaration bodies
 - Each branch of `ModularIf` / `ModularIfElse`
-- Body of `ModularFor` / `ModularCFor` / `ModularIntersectionFor` / `ModularIntersectionCFor`
+- Body of `ModularFor` / `ModularIntersectionFor`
 - Children of `ModularCall` (module instantiation children)
 - Children of `ModularLet` / `ModularEcho` / `ModularAssert`
 
@@ -754,14 +752,12 @@ Quick reference mapping AST nodes to their scope-related fields:
 | `ModularIf` | - | `true_branch` | Branch creates scope |
 | `ModularIfElse` | - | `true_branch`, `false_branch` | Each branch creates separate scope |
 | `ModularFor` | `assignments` | `body` | Loop variables in `assignments` |
-| `ModularCFor` | `initial`, `increment` | `body` | C-style for loop |
 | `ModularIntersectionFor` | `assignments` | `body` | Intersection for loop |
-| `ModularIntersectionCFor` | `initial`, `increment` | `body` | C-style intersection for |
 | `ModularCall` | - | `children` | Module instantiation children create scope |
 | `ListCompFor` | `assignments` | `body` | List comprehension for |
-| `ListCompCFor` | `initial`, `increment` | `body` | List comprehension c-for |
+| `ListCompCFor` | `inits`, `incrs` | `body` | List comprehension c-for |
 | `ListCompLet` | `assignments` | `body` | List comprehension let |
-| `FunctionLiteral` | `arguments` | `body` | Anonymous function |
+| `FunctionLiteral` | `parameters` | `body` | Anonymous function |
 | `Assignment` | `name` | - | Top-level variable binding |
 | `ParameterDeclaration` | `name`, `default` | - | Used in function/module params |
 
@@ -773,6 +769,6 @@ Quick reference mapping AST nodes to their scope-related fields:
 - **`assignments`**: List of `Assignment` nodes
 - **`children`**: List of `ModuleInstantiation` nodes
 - **`body`**: Single expression or instantiation node
-- **`initial`/`increment`**: Lists of `Assignment` nodes (C-style loops)
+- **`inits`/`incrs`**: Lists of `Assignment` nodes (C-style loops)
 - **`name`**: `Identifier` node containing the variable name
 - **`default`**: Optional `Expression` for default value
