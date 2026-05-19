@@ -348,8 +348,9 @@ class TestLetEchoAssertFormatting:
 
 
 class TestListCompForFormatting:
-    def test_short_for_stays_inline(self):
-        assert _fmt("x = [for (i = [0:3]) i];") == "x = [for (i = [0:3:1]) i];"
+    def test_short_for_expands(self):
+        out = _fmt("x = [for (i = [0:3]) i];")
+        assert out == "x = [\n    for (i = [0:3:1])\n        i\n];"
 
     def test_long_for_body_on_new_line(self):
         out = _fmt("x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];")
@@ -522,6 +523,34 @@ class TestTernaryFormatting:
         ast2 = _roundtrip(code)
         assert len(ast2) == 1
         assert isinstance(ast2[0], Assignment)
+
+    def test_ternary_false_branch_let_block_indent(self):
+        src = "function f(u) = is_num(u) ? g(u)[0] : let(d1 = h(u, 1), d2 = h(u, 2)) d1 + d2;"
+        out = _fmt(src)
+        lines = out.split("\n")
+        # ": let(" should start at indent+2 (6 spaces inside a function body)
+        colon_line = next(l for l in lines if l.lstrip().startswith(": let("))
+        let_col = colon_line.index("let(")
+        # assignment lines should be indented one w (4) past let(
+        assign_line = next(l for l in lines if "d1 = " in l)
+        assert assign_line.startswith(" " * (let_col + 4))
+        # closing ) should align with let(
+        close_line = next(l for l in lines if l.strip() == ")")
+        assert close_line == " " * let_col + ")"
+
+    def test_ternary_branch_list_comp_indent(self):
+        src = "function f(u) = is_vector(u) ? unit(u) : [for (v = u) unit(v)];"
+        out = _fmt(src)
+        lines = out.split("\n")
+        # ": [" — find column of "["
+        colon_line = next(l for l in lines if l.lstrip().startswith(": ["))
+        bracket_col = colon_line.index("[")
+        # for loop should be indented one w (4) past "["
+        for_line = next(l for l in lines if "for (" in l)
+        assert for_line.startswith(" " * (bracket_col + 4))
+        # closing ] should align with "["
+        close_line = next(l for l in lines if l.strip() == "];")
+        assert close_line == " " * bracket_col + "];"
 
 
 class TestOperatorPrecedenceParens:

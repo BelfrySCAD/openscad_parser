@@ -116,6 +116,21 @@ x = condition1
 
 This rule applies uniformly to ternaries in assignment right-hand sides and function declaration bodies.
 
+When a branch is itself a block-formatted expression (`let`, `assert`, `echo`, a list comprehension, or a long function call), its closing delimiter aligns with its visual start column — 2 characters past the `? ` or `: ` prefix. This means block content is indented one full `indent_width` from the keyword, and the closing token returns to the keyword's column:
+
+```
+x = cond
+  ? let(
+        a = 1,
+        b = 2
+    )
+    a + b
+  : [
+        for (i = [0:5])
+            i * 2
+    ];
+```
+
 ### Assert and Echo Expressions
 
 `assert(...)` and `echo(...)` used as expressions each appear on their own line, with the body expression following at the same indentation. Multiple assert/echo prefixes chain naturally.
@@ -172,19 +187,44 @@ x = some_function(
 );
 ```
 
-### List Comprehensions
-
-A list comprehension is rendered inline when its total length (plus indentation) fits within 100 characters. When it exceeds the limit, `[` opens on the first line, each element goes on its own line indented one level, and `]` closes at the original indent.
+When arguments are laid out one per line, each argument expression is individually reformatted through the same rules as any other expression — ternaries expand to three lines, `let`/`assert`/`echo` place their body on the next line, and list comprehensions expand if needed:
 
 ```
+x = some_function(
+    arg_one,
+    some_condition
+      ? true_value
+      : false_value,
+    arg_three
+);
+```
+
+### List Comprehensions
+
+A list comprehension expands to block form whenever any of the following is true:
+
+- Its inline length (plus indentation) exceeds 100 characters, **or**
+- Any element formats as multiline when expanded (this includes all `for` loops, since the body always goes on its own line).
+
+A comprehension containing only plain values stays inline if it fits within 100 characters:
+
+```
+x = [1, 2, 3];
+```
+
+**`if` elements** within a comprehension are formatted with parentheses around the condition:
+
+```
+x = [for (i = [0:10]) if (i % 2 == 0) i];
+
 x = [
-    element_one,
-    element_two,
-    element_three
+    for (i = [0:10])
+        if (i % 2 == 0)
+            i * 2
 ];
 ```
 
-**`for` elements** within a multiline comprehension always place the body on the next line, indented one level:
+Any comprehension containing a `for` loop always expands, since the loop body is always on its own line:
 
 ```
 x = [
@@ -193,7 +233,7 @@ x = [
 ];
 ```
 
-If the `for (assignments)` header itself exceeds 100 characters, assignments are formatted one per line with `)` on its own line at the `for` indent:
+If the `for (assignments)` header itself exceeds 100 characters, its assignments are formatted one per line with `)` on its own line at the `for` indent:
 
 ```
 x = [
@@ -217,7 +257,17 @@ x = [
 
 C-style `for` loops (`for (init; cond; incr)`) also place the body on the next line but keep the three-part header on one line.
 
-**`let` elements** within a comprehension follow the same inline/block rule as let expressions. If any assignment value is multiline, the whole comprehension is forced to expand and the `let` uses the block format:
+**`let` elements** within a comprehension follow the same inline/block rule as let expressions. The `let` assignments appear first; the body (whether a `for` loop or an expression) always starts on the next line at the same indent as the `let`:
+
+```
+x = [
+    let(a = 1)
+    for (i = [0:5])
+        i + a
+];
+```
+
+If any assignment value is multiline (e.g. a ternary), the `let` uses the block format and the whole comprehension expands:
 
 ```
 x = [
@@ -226,11 +276,12 @@ x = [
           ? value_a
           : value_b
     )
-    y + 1
+    for (i = [0:5])
+        i + y
 ];
 ```
 
-A `let` with only simple assignments stays inline and does not force comprehension expansion:
+A `let` whose body is a plain expression (not a `for` loop) and all assignments are simple stays inline if the comprehension doesn't otherwise need to expand:
 
 ```
 x = [let(y = 2) y + 1];
@@ -423,6 +474,18 @@ some_module(
     cube(1);
     sphere(2);
 }
+```
+
+As with function call expressions, each argument is individually reformatted when the call goes multiline — ternaries, `let`, list comprehensions, and nested long calls all apply their own expansion rules:
+
+```
+some_module(
+    arg_one,
+    size=some_condition
+      ? large_value
+      : small_value,
+    arg_three
+);
 ```
 
 ### for and intersection_for

@@ -20,6 +20,8 @@ from .nodes import (
     ListCompFor,
     ListCompCFor,
     ListCompLet,
+    PositionalArgument,
+    NamedArgument,
 )
 
 
@@ -66,17 +68,33 @@ def _fmt_list_elem(elem, indent: int, w: int) -> str:
     pad = " " * indent
     inner_pad = " " * (indent + w)
     if isinstance(elem, ListCompFor):
-        assigns_inline = ", ".join(str(a) for a in elem.assignments)
+        formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
         body = _fmt_list_elem(elem.body, indent + w, w)
-        if len(f"for ({assigns_inline})") + indent > _MULTILINE_CHAR_LIMIT:
-            assign_lines = (",\n" + inner_pad).join(str(a) for a in elem.assignments)
+        assigns_inline = ", ".join(formatted)
+        if any("\n" in fa for fa in formatted) or len(f"for ({assigns_inline})") + indent > _MULTILINE_CHAR_LIMIT:
+            assign_lines = (",\n" + inner_pad).join(formatted)
             return f"for (\n{inner_pad}{assign_lines}\n{pad})\n{inner_pad}{body}"
         return f"for ({assigns_inline})\n{inner_pad}{body}"
     if isinstance(elem, ListCompCFor):
-        inits = ", ".join(str(a) for a in elem.inits)
-        incrs = ", ".join(str(a) for a in elem.incrs)
+        fmt_inits = [_fmt_assign(a, indent + w, w) for a in elem.inits]
+        fmt_incrs = [_fmt_assign(a, indent + w, w) for a in elem.incrs]
+        inits_str = ", ".join(fmt_inits)
+        incrs_str = ", ".join(fmt_incrs)
+        cond_str = str(elem.condition)
         body = _fmt_list_elem(elem.body, indent + w, w)
-        return f"for ({inits}; {elem.condition}; {incrs})\n{inner_pad}{body}"
+        header = f"for ({inits_str}; {cond_str}; {incrs_str})"
+        any_multiline = (
+            any("\n" in fa for fa in fmt_inits) or
+            any("\n" in fa for fa in fmt_incrs) or
+            "\n" in cond_str
+        )
+        if any_multiline or len(header) + indent > _MULTILINE_CHAR_LIMIT:
+            return (
+                f"for (\n{inner_pad}{inits_str};\n"
+                f"{inner_pad}{cond_str};\n"
+                f"{inner_pad}{incrs_str}\n{pad})\n{inner_pad}{body}"
+            )
+        return f"{header}\n{inner_pad}{body}"
     if isinstance(elem, ListCompLet):
         formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
         body = _fmt_list_elem(elem.body, indent, w)
@@ -84,7 +102,7 @@ def _fmt_list_elem(elem, indent: int, w: int) -> str:
             assign_lines = (",\n" + inner_pad).join(formatted)
             return f"let(\n{inner_pad}{assign_lines}\n{pad})\n{pad}{body}"
         assigns = ", ".join(formatted)
-        return f"let({assigns}) {body}"
+        return f"let({assigns})\n{pad}{body}"
     if isinstance(elem, LetOp):
         formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
         body = str(elem.body)
@@ -93,14 +111,16 @@ def _fmt_list_elem(elem, indent: int, w: int) -> str:
             return f"let(\n{inner_pad}{assign_lines}\n{pad})\n{pad}{body}"
         assigns = ", ".join(formatted)
         return f"let({assigns}) {body}"
+    if isinstance(elem, ListComprehension):
+        return _fmt_expr(elem, indent, w)
     return str(elem)
 
 
-def _fmt_multiline_args(head: str, args: list, indent: int, w: int) -> str:
+def _fmt_multiline_args(head: str, args: list, indent: int, w: int, fmt_fn=str) -> str:
     """Format `head(arg1, arg2, ...)` with each arg on its own line."""
     inner_pad = " " * (indent + w)
     pad = " " * indent
-    arg_lines = (",\n" + inner_pad).join(str(a) for a in args)
+    arg_lines = (",\n" + inner_pad).join(fmt_fn(a) for a in args)
     return f"{head}(\n{inner_pad}{arg_lines}\n{pad})"
 
 
@@ -109,15 +129,31 @@ def _fmt_assign(assign, indent: int, w: int) -> str:
     return f"{assign.name} = {_fmt_expr(assign.expr, indent, w)}"
 
 
+def _fmt_argument(arg, indent: int, w: int) -> str:
+    """Format a call argument, routing its expression through _fmt_expr."""
+    if isinstance(arg, PositionalArgument):
+        return _fmt_expr(arg.expr, indent, w)
+    if isinstance(arg, NamedArgument):
+        return f"{arg.name}={_fmt_expr(arg.expr, indent, w)}"
+    return str(arg)
+
+
 def _fmt_expr(expr, indent: int, w: int) -> str:
     """Format an expression with indent-aware layout for ternary, assert, and echo."""
     pad = " " * indent
     if isinstance(expr, TernaryOp):
         pad2 = " " * (indent + 2)
+        def _fmt_branch(branch):
+            # Nested ternary: 2 spaces per nesting level
+            if isinstance(branch, TernaryOp):
+                return _fmt_expr(branch, indent + 2, w)
+            # All other expressions: their visual start is 2 chars into "? "/":", "
+            # so block content and closing delimiters align to indent + 4
+            return _fmt_expr(branch, indent + 4, w)
         return (
             f"{expr.condition}\n"
-            f"{pad2}? {_fmt_expr(expr.true_expr, indent + 2, w)}\n"
-            f"{pad2}: {_fmt_expr(expr.false_expr, indent + 2, w)}"
+            f"{pad2}? {_fmt_branch(expr.true_expr)}\n"
+            f"{pad2}: {_fmt_branch(expr.false_expr)}"
         )
     if isinstance(expr, AssertOp):
         args = ", ".join(str(a) for a in expr.arguments)
@@ -139,18 +175,15 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
     if isinstance(expr, PrimaryCall):
         inline = str(expr)
         if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
-            return _fmt_multiline_args(str(expr.left), expr.arguments, indent, w)
+            return _fmt_multiline_args(
+                str(expr.left), expr.arguments, indent, w,
+                fmt_fn=lambda a: _fmt_argument(a, indent + w, w),
+            )
     if isinstance(expr, ListComprehension):
         inner_pad = " " * (indent + w)
-        let_multiline = any(
-            isinstance(e, (LetOp, ListCompLet)) and (
-                len(e.assignments) > 1 or
-                any("\n" in _fmt_assign(a, indent + w + w, w) for a in e.assignments)
-            )
-            for e in expr.elements
-        )
-        if len(str(expr)) + indent > _MULTILINE_CHAR_LIMIT or let_multiline:
-            formatted_elems = [_fmt_list_elem(e, indent + w, w) for e in expr.elements]
+        formatted_elems = [_fmt_list_elem(e, indent + w, w) for e in expr.elements]
+        any_multiline = any("\n" in fe for fe in formatted_elems)
+        if len(str(expr)) + indent > _MULTILINE_CHAR_LIMIT or any_multiline:
             items = (",\n" + inner_pad).join(formatted_elems)
             return f"[\n{inner_pad}{items}\n{pad}]"
     return str(expr)
@@ -241,7 +274,10 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         head = f"{pad}{prefix}{node.name}"
         inline = f"{head}({_join_str(node.arguments)})"
         if len(inline) > _MULTILINE_CHAR_LIMIT:
-            call = _fmt_multiline_args(head, node.arguments, indent, w)
+            call = _fmt_multiline_args(
+                head, node.arguments, indent, w,
+                fmt_fn=lambda a: _fmt_argument(a, indent + w, w),
+            )
         else:
             call = inline
         return call + _fmt_child(node.children, indent, w)
