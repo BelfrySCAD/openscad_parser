@@ -1350,7 +1350,7 @@ class ListCompIf(VectorElement):
     true_expr: VectorElement
 
     def __str__(self):
-        return f"if {self.condition} {self.true_expr}"
+        return f"if ({self.condition}) {self.true_expr}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1379,7 +1379,7 @@ class ListCompIfElse(VectorElement):
     false_expr: VectorElement
 
     def __str__(self):
-        return f"if {self.condition} {self.true_expr} else {self.false_expr}"
+        return f"if ({self.condition}) {self.true_expr} else {self.false_expr}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope

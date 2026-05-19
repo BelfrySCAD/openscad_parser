@@ -22,7 +22,7 @@ Features
 - AST tree can contain comment nodes (single-line and multi-line)
 - AST tree uses dataclasses and can be pickled/unpickled for caching/serialization
 - JSON and YAML serialization/deserialization of AST trees
-- Pretty-printer that converts an AST back to formatted OpenSCAD source (``to_openscad()``)
+- Pretty-printer that converts an AST back to formatted OpenSCAD source (``to_openscad()``) with correct operator-precedence parenthesization
 - Command-line interface (``openscad-parser``) for JSON/YAML/formatted output
 
 Installation
@@ -398,8 +398,8 @@ List Comprehensions
 - ``ListComprehension(elements: list[VectorElement])``: Vector/list literals ``[elements]``
 - ``ListCompFor(assignments: list[Assignment], body: VectorElement)``: for loops in list comprehensions ``for(assignments) body``
 - ``ListCompCFor(inits: list[Assignment], condition: Expression, incrs: list[Assignment], body: VectorElement)``: C-style for loops in list comprehensions ``for(inits; condition; incrs) body``
-- ``ListCompIf(condition: Expression, true_expr: VectorElement)``: Conditional inclusion without else ``if(condition) true_expr``
-- ``ListCompIfElse(condition: Expression, true_expr: VectorElement, false_expr: VectorElement)``: Conditional inclusion with else ``if(condition) true_expr else false_expr``
+- ``ListCompIf(condition: Expression, true_expr: VectorElement)``: Conditional inclusion without else ``if (condition) true_expr``
+- ``ListCompIfElse(condition: Expression, true_expr: VectorElement, false_expr: VectorElement)``: Conditional inclusion with else ``if (condition) true_expr else false_expr``
 - ``ListCompLet(assignments: list[Assignment], body: VectorElement)``: let expressions in list comprehensions ``let(assignments) body``
 - ``ListCompEach(body: VectorElement)``: each expressions (flattens nested lists) ``each body``
 
@@ -762,7 +762,7 @@ The ``to_openscad()`` function converts an AST back to formatted OpenSCAD source
 
     formatted = to_openscad(ast)
     # module box(w, h) {
-    #     cube([w, h, 1.0]);
+    #     cube([w, h, 1]);
     # }
     print(formatted)
 
@@ -779,6 +779,12 @@ control structures, modifiers, list comprehensions, and comments.
 
     - Blank lines are inserted before and after module/function declarations.
     - Single-child module instantiations are formatted inline; multiple children use a block.
+    - Operator precedence is preserved — parentheses are re-inserted exactly where needed.
+    - Boolean literals are always written as ``true`` / ``false``.
+    - Ternary expressions are formatted across three lines (``condition``, ``? true``, ``: false``); block-formatted branches (``let``, ``assert``, ``echo``, list comprehensions, long calls) align their closing delimiter with their visual keyword column.
+    - ``let()``, ``assert()``, and ``echo()`` expressions place their body on the next line.
+    - List comprehensions containing ``for`` loops always expand to block form; ``if (condition)`` elements include parentheses around the condition.
+    - Long argument/parameter lists (> 100 characters) are formatted one argument per line, with each argument expression individually reformatted (ternaries, let, list comprehensions, nested long calls).
     - Comments are preserved when the AST was parsed with ``include_comments=True``.
 
 Controlling indentation::

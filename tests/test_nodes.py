@@ -201,13 +201,13 @@ def test_list_comprehension_str():
     assert "i = 0" in str(list_c_for)
 
     list_if = ListCompIf(condition=_num(1.0), true_expr=_num(5.0), position=_pos())
-    assert str(list_if) == "if 1 5"
+    assert str(list_if) == "if (1) 5"
 
     list_if_else = ListCompIfElse(condition=_num(1.0), true_expr=_num(6.0), false_expr=_num(7.0), position=_pos())
-    assert str(list_if_else) == "if 1 6 else 7"
+    assert str(list_if_else) == "if (1) 6 else 7"
 
     list_comp = ListComprehension(elements=[list_if], position=_pos())
-    assert str(list_comp) == "[if 1 5]"
+    assert str(list_comp) == "[if (1) 5]"
 
 
 def test_modular_and_declaration_str():
