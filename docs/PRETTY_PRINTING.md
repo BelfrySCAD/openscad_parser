@@ -163,7 +163,7 @@ function f(x) =
     y + 1;
 ```
 
-**Block** — two or more assignments, or any single assignment whose value is multiline (e.g. a ternary): `let(` opens, each assignment on its own line indented one level, `)` closes at the original indent:
+**Block** — two or more assignments, or any single assignment whose value is multiline (e.g. a ternary): `let(` opens, each assignment on its own line indented one level, `)` closes at the original indent. When the body is a plain expression, it follows on the next line:
 
 ```
 function f(a, b) =
@@ -180,6 +180,15 @@ function f(x) =
           : -x
     )
     y + 1;
+```
+
+When the body is a vector or list comprehension, the closing `)` and opening `[` are coalesced onto one line (see [§5 `) / [` Coalescing](#--coalescing)):
+
+```
+x = let(
+    a = 1,
+    b = 2
+) [a, b, a + b];
 ```
 
 This same inline/block rule applies to `let()` inside `let()` module calls and inside list comprehensions.
@@ -340,6 +349,29 @@ The precedence table (low → high):
 | 70 | `*`, `/`, `%` |
 | 80 | unary `-`, `!`, `~` |
 | 90 | `^` (right-associative) |
+
+### `)` / `[` Coalescing
+
+When a closing `)` lands on a line by itself and the very next line starts with `[`, the two are joined onto one line as `) [`. This most commonly occurs when a block-form `let(` is followed by a vector or list comprehension body:
+
+```
+// two or more assignments → block let, body is a vector
+x = let(
+    a = 1,
+    b = 2
+) [a, b, a + b];
+
+// block let followed by an expanding list comprehension
+x = let(
+    a = 1,
+    b = 2
+) [
+    for (i = [0:5])
+        i + a
+];
+```
+
+The indentation of the resulting `) [` line is taken from the `)` line. A `)` with any trailing content (e.g. `);` or `) {`) is not coalesced.
 
 ### Other Expressions
 

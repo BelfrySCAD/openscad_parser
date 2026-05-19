@@ -47,7 +47,27 @@ def to_openscad(nodes: list[ASTNode], indent_width: int = 4) -> str:
             parts.append("")
         parts.append(_fmt_node(node, 0, indent_width))
         prev_complex = is_complex
-    return "\n".join(parts)
+    return _coalesce_paren_bracket("\n".join(parts))
+
+
+def _coalesce_paren_bracket(text: str) -> str:
+    """Join consecutive lines where one is a bare ')' and the next starts with '['."""
+    lines = text.split("\n")
+    result = []
+    i = 0
+    while i < len(lines):
+        if (
+            i + 1 < len(lines)
+            and lines[i].strip() == ")"
+            and lines[i + 1].lstrip().startswith("[")
+        ):
+            indent = len(lines[i]) - len(lines[i].lstrip())
+            result.append(" " * indent + ") " + lines[i + 1].lstrip())
+            i += 2
+        else:
+            result.append(lines[i])
+            i += 1
+    return "\n".join(result)
 
 
 # Line length beyond which call arguments are formatted one-per-line.
