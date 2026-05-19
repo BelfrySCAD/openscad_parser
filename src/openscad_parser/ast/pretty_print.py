@@ -15,11 +15,15 @@ from .nodes import (
     EchoOp,
     AssertOp,
     LetOp,
+    UndefinedLiteral,
     PrimaryCall,
     ListComprehension,
     ListCompFor,
     ListCompCFor,
     ListCompLet,
+    ListCompIf,
+    ListCompIfElse,
+    ListCompEach,
     PositionalArgument,
     NamedArgument,
 )
@@ -105,14 +109,29 @@ def _fmt_list_elem(elem, indent: int, w: int) -> str:
         return f"let({assigns})\n{pad}{body}"
     if isinstance(elem, LetOp):
         formatted = [_fmt_assign(a, indent + w, w) for a in elem.assignments]
-        body = str(elem.body)
+        body = _fmt_expr(elem.body, indent, w)
         if len(formatted) > 1 or any("\n" in fa for fa in formatted):
             assign_lines = (",\n" + inner_pad).join(formatted)
             return f"let(\n{inner_pad}{assign_lines}\n{pad})\n{pad}{body}"
         assigns = ", ".join(formatted)
-        return f"let({assigns}) {body}"
+        inline = f"let({assigns}) {body}"
+        if "\n" in body or len(inline) + indent > _MULTILINE_CHAR_LIMIT:
+            return f"let({assigns})\n{pad}{body}"
+        return inline
     if isinstance(elem, ListComprehension):
         return _fmt_expr(elem, indent, w)
+    if isinstance(elem, ListCompIf):
+        cond = str(elem.condition)
+        body = _fmt_list_elem(elem.true_expr, indent + w, w)
+        return f"if ({cond})\n{inner_pad}{body}"
+    if isinstance(elem, ListCompIfElse):
+        cond = str(elem.condition)
+        true_body = _fmt_list_elem(elem.true_expr, indent + w, w)
+        false_body = _fmt_list_elem(elem.false_expr, indent + w, w)
+        return f"if ({cond})\n{inner_pad}{true_body}\n{pad}else\n{inner_pad}{false_body}"
+    if isinstance(elem, ListCompEach):
+        body = _fmt_list_elem(elem.body, indent, w)
+        return f"each {body}"
     return str(elem)
 
 
@@ -138,10 +157,43 @@ def _fmt_argument(arg, indent: int, w: int) -> str:
     return str(arg)
 
 
+def _fmt_ternary_chain(expr: TernaryOp, indent: int, w: int) -> str:
+    """Format a right-chain of ternaries with flat ? / : alignment.
+
+    All ': ' connectors stay at the same indent column as the conditions;
+    each true branch is on its own line at indent+w.  The '?' moves to
+    the end of the condition line rather than the beginning of the true-branch.
+
+        cond1?
+            true1
+        : cond2?
+            true2
+        : final_else
+    """
+    pad = " " * indent
+    inner_pad = " " * (indent + w)
+    parts = []
+    node: TernaryOp = expr
+    while isinstance(node, TernaryOp):
+        parts.append((node.condition, node.true_expr))
+        node = node.false_expr
+    final = node
+    lines = []
+    for i, (cond, true_expr) in enumerate(parts):
+        true_str = _fmt_expr(true_expr, indent + w, w)
+        prefix = "" if i == 0 else f"{pad}: "
+        lines.append(f"{prefix}{cond} ?\n{inner_pad}{true_str}")
+    lines.append(f"{pad}: {_fmt_expr(final, indent + w, w)}")
+    return "\n".join(lines)
+
+
 def _fmt_expr(expr, indent: int, w: int) -> str:
     """Format an expression with indent-aware layout for ternary, assert, and echo."""
     pad = " " * indent
     if isinstance(expr, TernaryOp):
+        # Right-chain of ternaries → flat cascade format
+        if isinstance(expr.false_expr, TernaryOp):
+            return _fmt_ternary_chain(expr, indent, w)
         pad2 = " " * (indent + 2)
         def _fmt_branch(branch):
             # Nested ternary: 2 spaces per nesting level
@@ -157,9 +209,13 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
         )
     if isinstance(expr, AssertOp):
         args = ", ".join(str(a) for a in expr.arguments)
+        if isinstance(expr.body, UndefinedLiteral):
+            return f"assert({args})"
         return f"assert({args})\n{pad}{_fmt_expr(expr.body, indent, w)}"
     if isinstance(expr, EchoOp):
         args = ", ".join(str(a) for a in expr.arguments)
+        if isinstance(expr.body, UndefinedLiteral):
+            return f"echo({args})"
         return f"echo({args})\n{pad}{_fmt_expr(expr.body, indent, w)}"
     if isinstance(expr, LetOp):
         inner_pad = " " * (indent + w)
@@ -171,7 +227,7 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
                 f"{pad}{_fmt_expr(expr.body, indent, w)}"
             )
         assigns = ", ".join(formatted)
-        return f"let({assigns})\n{pad}{_fmt_expr(expr.body, indent, w)}"
+        return f"let({assigns})\n{inner_pad}{_fmt_expr(expr.body, indent + w, w)}"
     if isinstance(expr, PrimaryCall):
         inline = str(expr)
         if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
@@ -301,12 +357,24 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         return f"{pad}{prefix}let ({assigns})" + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularEcho):
-        args = _join_str(node.arguments)
-        return f"{pad}{prefix}echo({args})" + _fmt_child(node.children, indent, w)
+        head = f"{pad}{prefix}echo"
+        inline = f"{head}({_join_str(node.arguments)})"
+        if len(inline) > _MULTILINE_CHAR_LIMIT:
+            call = _fmt_multiline_args(head, node.arguments, indent, w,
+                                       fmt_fn=lambda a: _fmt_argument(a, indent + w, w))
+        else:
+            call = inline
+        return call + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularAssert):
-        args = _join_str(node.arguments)
-        return f"{pad}{prefix}assert({args})" + _fmt_child(node.children, indent, w)
+        head = f"{pad}{prefix}assert"
+        inline = f"{head}({_join_str(node.arguments)})"
+        if len(inline) > _MULTILINE_CHAR_LIMIT:
+            call = _fmt_multiline_args(head, node.arguments, indent, w,
+                                       fmt_fn=lambda a: _fmt_argument(a, indent + w, w))
+        else:
+            call = inline
+        return call + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularIf):
         header = f"{pad}{prefix}if ({node.condition})"
