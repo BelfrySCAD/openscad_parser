@@ -6,7 +6,7 @@ from openscad_parser.ast.nodes import (
     Assignment, FunctionDeclaration, ModuleDeclaration,
     ModularCall, ModularFor, ModularIf, ModularIfElse,
 )
-from openscad_parser.ast.pretty_print import _as_list
+from openscad_parser.ast.pretty_print import _as_list, _coalesce_paren_bracket
 
 
 def _roundtrip(code: str) -> list:
@@ -644,3 +644,45 @@ class TestAsListHelper:
     def test_single_value_wraps(self):
         assert _as_list("x") == ["x"]
         assert _as_list(42) == [42]
+
+
+class TestCoalesceParenBracket:
+    """Unit tests for the ) / [ line-coalescing post-processor."""
+
+    def test_bare_paren_bracket_joined(self):
+        inp = "    )\n    ["
+        assert _coalesce_paren_bracket(inp) == "    ) ["
+
+    def test_bracket_content_preserved(self):
+        inp = "    )\n    [1, 2, 3]"
+        assert _coalesce_paren_bracket(inp) == "    ) [1, 2, 3]"
+
+    def test_indentation_from_paren_line(self):
+        # The coalesced line uses the indent of the ')' line, not the '[' line.
+        inp = "        )\n            [x, y]"
+        assert _coalesce_paren_bracket(inp) == "        ) [x, y]"
+
+    def test_no_coalesce_when_paren_has_trailing_content(self):
+        inp = "    ) {\n    ["
+        assert _coalesce_paren_bracket(inp) == "    ) {\n    ["
+
+    def test_no_coalesce_when_bracket_preceded_by_non_paren(self):
+        inp = "    x = 1\n    [1, 2]"
+        assert _coalesce_paren_bracket(inp) == "    x = 1\n    [1, 2]"
+
+    def test_multiple_occurrences(self):
+        inp = ")\n[\n)\n["
+        assert _coalesce_paren_bracket(inp) == ") [\n) ["
+
+    def test_let_block_with_vector_body(self):
+        out = _fmt("x = let(a = 1, b = 2) [a, b];")
+        assert ") [a, b];" in out
+        assert "\n)" not in out.split(") [")[0].split("\n")[-1]  # no bare ) before the join
+
+    def test_let_block_with_list_comp_body(self):
+        out = _fmt("x = let(a = 1, b = 2) [for (i = [0:5]) i + a];")
+        assert ") [\n" in out
+        # no consecutive lines of bare ) then [
+        lines = out.split("\n")
+        for i in range(len(lines) - 1):
+            assert not (lines[i].strip() == ")" and lines[i + 1].lstrip().startswith("["))
