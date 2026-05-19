@@ -302,28 +302,32 @@ class TestASTBuilderVisitorEdgeCases:
             visitor.visit_let_expr(node, [])
 
     def test_visit_assert_expr_missing_expression(self):
-        """Test visit_assert_expr with missing expression."""
+        """Test visit_assert_expr with no body returns AssertOp with UndefinedLiteral body."""
+        from openscad_parser.ast.nodes import AssertOp, UndefinedLiteral
         parser = getOpenSCADParser()
         visitor = ASTBuilderVisitor(parser)
-        
+
         class MockNode:
             position = 0
-        
+
         node = MockNode()
-        with pytest.raises(ValueError, match="assert_expr should have an Expression body"):
-            visitor.visit_assert_expr(node, [])
+        result = visitor.visit_assert_expr(node, [])
+        assert isinstance(result, AssertOp)
+        assert isinstance(result.body, UndefinedLiteral)
 
     def test_visit_echo_expr_missing_expression(self):
-        """Test visit_echo_expr with missing expression."""
+        """Test visit_echo_expr with no body returns EchoOp with UndefinedLiteral body."""
+        from openscad_parser.ast.nodes import EchoOp, UndefinedLiteral
         parser = getOpenSCADParser()
         visitor = ASTBuilderVisitor(parser)
-        
+
         class MockNode:
             position = 0
-        
+
         node = MockNode()
-        with pytest.raises(ValueError, match="echo_expr should have an Expression body"):
-            visitor.visit_echo_expr(node, [])
+        result = visitor.visit_echo_expr(node, [])
+        assert isinstance(result, EchoOp)
+        assert isinstance(result.body, UndefinedLiteral)
 
     def test_visit_ternary_expr_wrong_count(self):
         """Test visit_ternary_expr with wrong number of expressions."""

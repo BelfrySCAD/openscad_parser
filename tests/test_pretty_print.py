@@ -451,11 +451,11 @@ class TestMultilineArgFormatting:
 class TestLetExprFormatting:
     def test_let_no_assignments(self):
         out = _fmt("function f() = let() 0;")
-        assert out == "function f() =\n    let()\n    0;"
+        assert out == "function f() =\n    let()\n        0;"
 
     def test_let_single_assignment(self):
         out = _fmt("function f(x) = let(y = x * 2) y + 1;")
-        assert out == "function f(x) =\n    let(y = x * 2)\n    y + 1;"
+        assert out == "function f(x) =\n    let(y = x * 2)\n        y + 1;"
 
     def test_let_multi_assignment(self):
         out = _fmt("function f(a, b) = let(x = a * 2, y = b + 1) x + y;")
@@ -496,6 +496,23 @@ class TestAssertEchoExprFormatting:
         code = "function f(x) = assert(x > 0) x * 2;"
         assert len(_roundtrip(code)) == 1
 
+    def test_assert_no_body(self):
+        # assert(cond) with no body is valid OpenSCAD; renders without a body line
+        out = _fmt("x = a ? 1 : assert(ok);")
+        assert "assert(ok);" in out
+        assert "undef" not in out
+
+    def test_echo_no_body(self):
+        out = _fmt('x = a ? 1 : echo("hi");')
+        assert 'echo("hi");' in out
+        assert "undef" not in out
+
+    def test_assert_no_body_in_ternary_false_branch(self):
+        # Regression: assert without body in ternary false branch must not be dropped
+        out = _fmt('x = a == "X" ? 1 : assert(in_list(a, ["X", "Y"]));')
+        assert "assert(in_list(a," in out
+        assert "undef" not in out
+
 
 class TestTernaryFormatting:
     def test_assignment_ternary(self):
@@ -507,10 +524,11 @@ class TestTernaryFormatting:
         assert out == "function f(x) =\n    x > 0\n      ? x\n      : -x;"
 
     def test_nested_ternary(self):
+        # a ? b : (c ? d : e) is a right-chain → flat cascade format
         out = _fmt("x = a ? b : c ? d : e;")
-        assert "? b\n" in out
-        assert "    ? d\n" in out
-        assert "    : e;" in out
+        assert "a ?\n" in out     # condition ends with " ?"
+        assert ": c ?\n" in out  # second condition at same indent as first
+        assert ": e;" in out     # final else at same indent
 
     def test_indented_ternary(self):
         out = _fmt("module m() { x = a ? b : c; }")

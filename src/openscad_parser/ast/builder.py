@@ -624,7 +624,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
             arguments = children[0] if len(children) > 0 else []
             body = children[1] if len(children) > 1 else None
         if body is None:
-            raise ValueError("assert_expr should have an Expression body")
+            body = UndefinedLiteral(position=self._get_node_position(node))
         return AssertOp(arguments=arguments, body=body, position=self._get_node_position(node))
 
     def visit_echo_expr(self, node, children):
@@ -637,7 +637,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
             arguments = children[0] if len(children) > 0 else []
             body = children[1] if len(children) > 1 else None
         if body is None:
-            raise ValueError("echo_expr should have an Expression body")
+            body = UndefinedLiteral(position=self._get_node_position(node))
         return EchoOp(arguments=arguments, body=body, position=self._get_node_position(node))
     
     def visit_ternary_expr(self, node, children):

@@ -142,6 +142,15 @@ function f(x) =
     x * 2;
 ```
 
+When `assert(...)` or `echo(...)` appears **without a body expression** — valid in OpenSCAD as the last item in a chain, or as a ternary branch — it is rendered on a single line with no following expression:
+
+```
+// source:  x = ok ? val : assert(in_list(a, valid));
+// printed: x = ok
+//            ? val
+//            : assert(in_list(a, valid));
+```
+
 ### Let Expressions
 
 `let(...)` used as an expression always places its body on the next line at the same indentation as the `let`.

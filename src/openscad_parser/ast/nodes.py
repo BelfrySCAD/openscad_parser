@@ -430,7 +430,10 @@ class EchoOp(Expression):
     body: Expression
 
     def __str__(self):
-        return f"echo({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
+        args = ', '.join(str(arg) for arg in self.arguments)
+        if isinstance(self.body, UndefinedLiteral):
+            return f"echo({args})"
+        return f"echo({args}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -458,7 +461,10 @@ class AssertOp(Expression):
     body: Expression
 
     def __str__(self):
-        return f"assert({', '.join(str(arg) for arg in self.arguments)}) {self.body}"
+        args = ', '.join(str(arg) for arg in self.arguments)
+        if isinstance(self.body, UndefinedLiteral):
+            return f"assert({args})"
+        return f"assert({args}) {self.body}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
