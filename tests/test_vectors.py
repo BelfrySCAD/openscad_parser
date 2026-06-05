@@ -68,6 +68,39 @@ class TestRanges:
         code = "x = [0:2*5:10];"
         parse_success(parser, code)
 
+    def test_range_two_arg_round_trip(self):
+        """Two-argument range [start:end] must not gain a spurious :1 after round-trip."""
+        import tempfile
+        import os
+        from openscad_parser.ast import getASTfromFile
+        from openscad_parser.ast.pretty_print import to_openscad
+        code = "x = [for(i = [0:5]) i];"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write(code)
+            fname = f.name
+        output = to_openscad(getASTfromFile(fname, process_includes=False))
+        os.unlink(fname)
+        assert ":1]" not in output, f"Spurious step in output: {output!r}"
+        assert "[0:5]" in output
+
+    def test_range_three_arg_round_trip(self):
+        """Three-argument range [start:step:end] must preserve all three arguments."""
+        import tempfile
+        import os
+        from openscad_parser.ast import getASTfromFile
+        from openscad_parser.ast.pretty_print import to_openscad
+        cases = [
+            ("x = [for(i = [10:-1:0]) i];", "[10:-1:0]"),
+            ("x = [for(i = [0:1:4]) i];",   "[0:1:4]"),
+        ]
+        for src, expected in cases:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+                f.write(src)
+                fname = f.name
+            output = to_openscad(getASTfromFile(fname, process_includes=False))
+            os.unlink(fname)
+            assert expected in output, f"{src!r} → missing {expected!r} in {output!r}"
+
 
 class TestListComprehensionFor:
     """Test list comprehension with for."""

@@ -350,7 +350,7 @@ class TestLetEchoAssertFormatting:
 class TestListCompForFormatting:
     def test_short_for_expands(self):
         out = _fmt("x = [for (i = [0:3]) i];")
-        assert out == "x = [\n    for (i = [0:3:1])\n        i\n];"
+        assert out == "x = [\n    for (i = [0:3])\n        i\n];"
 
     def test_long_for_body_on_new_line(self):
         out = _fmt("x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];")
@@ -360,7 +360,7 @@ class TestListCompForFormatting:
     def test_long_for_assignments_multiline(self):
         out = _fmt("x = [for (very_long_variable_name_alpha = [start_value:end_value], very_long_variable_name_beta = [0:10]) very_long_variable_name_alpha];")
         assert "for (\n" in out
-        assert "    very_long_variable_name_alpha = [start_value:end_value:1]," in out
+        assert "    very_long_variable_name_alpha = [start_value:end_value]," in out
         assert ")\n" in out
 
     def test_nested_for(self):

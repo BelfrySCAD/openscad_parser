@@ -337,6 +337,11 @@ class RangeLiteral(Primary):
     step: Expression
 
     def __str__(self):
+        # A synthesised default step (2-arg source range) is tagged with the
+        # range node's own position; an explicit third argument has a distinct
+        # source position.
+        if self.step.position == self.position:
+            return f"[{self.start}:{self.end}]"
         return f"[{self.start}:{self.end}:{self.step}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:

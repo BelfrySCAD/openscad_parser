@@ -172,8 +172,15 @@ def test_primary_and_range_str():
     member = PrimaryMember(left=_ident("obj"), member=_ident("x"), position=_pos())
     assert str(member) == "obj.x"
 
-    range_lit = RangeLiteral(start=_num(0.0), end=_num(5.0), step=_num(1.0), position=_pos())
-    assert str(range_lit) == "[0:5:1]"
+    # 2-arg: step shares range position (synthesised default) → omit step
+    range_2arg = RangeLiteral(start=_num(0.0), end=_num(5.0), step=_num(1.0), position=_pos())
+    assert str(range_2arg) == "[0:5]"
+
+    # 3-arg: step has a distinct position (explicit in source) → include step
+    step_pos = Position(origin="<test>", line=1, column=5)
+    step_explicit = NumberLiteral(val=2.0, position=step_pos)
+    range_3arg = RangeLiteral(start=_num(0.0), end=_num(5.0), step=step_explicit, position=_pos())
+    assert str(range_3arg) == "[0:5:2]"
 
 
 def test_list_comprehension_str():
