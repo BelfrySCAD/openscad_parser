@@ -173,6 +173,38 @@ class TestStrings:
         code = 'x = "";'
         parse_success(parser, code)
 
+    def test_empty_string_ast(self):
+        """Empty string literal produces StringLiteral(val='')."""
+        import tempfile
+        import os
+        from openscad_parser.ast import getASTfromFile
+        from openscad_parser.ast.nodes import StringLiteral, Assignment
+        code = 'x = "";'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write(code)
+            fname = f.name
+        nodes = getASTfromFile(fname, process_includes=False)
+        os.unlink(fname)
+        assignment = nodes[0]
+        assert isinstance(assignment, Assignment)
+        assert isinstance(assignment.expr, StringLiteral)
+        assert assignment.expr.val == ""
+
+    def test_empty_string_round_trip(self):
+        """Empty string literal round-trips as \"\" not \"\" | \"\"."""
+        import tempfile
+        import os
+        from openscad_parser.ast import getASTfromFile
+        from openscad_parser.ast.pretty_print import to_openscad
+        code = 'x = "";'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as f:
+            f.write(code)
+            fname = f.name
+        output = to_openscad(getASTfromFile(fname, process_includes=False))
+        os.unlink(fname)
+        assert '"" | ""' not in output, f"Bug still present: {output!r}"
+        assert '""' in output
+
 
 class TestNumbers:
     """Test number literal parsing."""
