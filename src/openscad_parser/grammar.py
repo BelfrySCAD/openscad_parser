@@ -43,6 +43,11 @@ def comment():
     return [comment_line, comment_multi]
 
 
+def commentable_expr():
+    """An expression optionally preceded and/or followed by any comments."""
+    return (ZeroOrMore(comment), expr, ZeroOrMore(comment))
+
+
 def whitespace_only():
     """Whitespace rule that only matches whitespace characters (spaces, tabs, newlines), not comments."""
     return _(r'[ \t\n\r]+')
@@ -335,15 +340,15 @@ def statement_block():
 
 
 def module_definition():
-    return (KWD_MODULE, module_name, parameter_block, statement)
+    return (KWD_MODULE, ZeroOrMore(comment), module_name, ZeroOrMore(comment), parameter_block, ZeroOrMore(comment), statement)
 
 
 def function_definition():
-    return (KWD_FUNCTION, function_name, parameter_block, TOK_ASSIGN, expr, TOK_SEMICOLON)
+    return (KWD_FUNCTION, ZeroOrMore(comment), function_name, ZeroOrMore(comment), parameter_block, ZeroOrMore(comment), TOK_ASSIGN, commentable_expr, TOK_SEMICOLON)
 
 
 def assignment():
-    return (variable_name, TOK_ASSIGN, expr, TOK_SEMICOLON)
+    return (variable_name, TOK_ASSIGN, commentable_expr, TOK_SEMICOLON)
 
 
 def module_instantiation():
@@ -454,11 +459,11 @@ def parameter():
 
 
 def parameter_with_default():
-    return (variable_name, TOK_ASSIGN, expr)
+    return (ZeroOrMore(comment), variable_name, ZeroOrMore(comment), TOK_ASSIGN, commentable_expr)
 
 
 def parameter_without_default():
-    return (variable_name, Not(TOK_ASSIGN))
+    return (ZeroOrMore(comment), variable_name, ZeroOrMore(comment), Not(TOK_ASSIGN))
 
 
 # --- Arguments used when calling functions and modules ---
@@ -479,11 +484,11 @@ def argument():
 
 
 def positional_argument():
-    return (expr, Not(TOK_ASSIGN))
+    return (commentable_expr, Not(TOK_ASSIGN))
 
 
 def named_argument():
-    return (variable_name, TOK_ASSIGN, expr)
+    return (ZeroOrMore(comment), variable_name, TOK_ASSIGN, commentable_expr)
 
 
 # --- Expressions ---
@@ -493,7 +498,7 @@ def assignments_expr():
 
 
 def assignment_expr():
-    return (variable_name, TOK_ASSIGN, expr)
+    return (ZeroOrMore(comment), variable_name, TOK_ASSIGN, commentable_expr)
 
 
 def expr():
@@ -508,59 +513,86 @@ def expr():
 
 
 def let_expr():
-    return (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, expr)
+    return (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, commentable_expr)
 
 
 def assert_expr():
-    return (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
+    return (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(commentable_expr))
 
 
 def echo_expr():
-    return (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
+    return (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(commentable_expr))
 
 
 def funclit_def():
-    return (KWD_FUNCTION, TOK_PAREN, parameters, TOK_ENDPAREN, expr)
+    return (KWD_FUNCTION, TOK_PAREN, parameters, TOK_ENDPAREN, commentable_expr)
 
 
 def ternary_expr():
-    return (prec_logical_or, TOK_QUESTION, expr, TOK_COLON, expr)
+    return (prec_logical_or, TOK_QUESTION, commentable_expr, TOK_COLON, commentable_expr)
 
+
+def logical_or_op():
+    return (Optional(comment), TOK_LOGICAL_OR, Optional(comment))
 
 def prec_logical_or():
-    return OneOrMore(prec_logical_and, sep=TOK_LOGICAL_OR)
+    return (prec_logical_and, ZeroOrMore(logical_or_op, prec_logical_and))
 
+
+def logical_and_op():
+    return (Optional(comment), TOK_LOGICAL_AND, Optional(comment))
 
 def prec_logical_and():
-    return OneOrMore(prec_equality, sep=TOK_LOGICAL_AND)
+    return (prec_equality, ZeroOrMore(logical_and_op, prec_equality))
 
+
+def equality_op():
+    return (Optional(comment), [TOK_EQUAL, TOK_NOTEQUAL], Optional(comment))
 
 def prec_equality():
-    return OneOrMore(prec_comparison, sep=[TOK_EQUAL, TOK_NOTEQUAL])
+    return (prec_comparison, ZeroOrMore(equality_op, prec_comparison))
 
+
+def comparison_op():
+    return (Optional(comment), [TOK_LTE, TOK_GTE, TOK_LT, TOK_GT], Optional(comment))
 
 def prec_comparison():
-    return OneOrMore(prec_binary_or, sep=[TOK_LTE, TOK_GTE, TOK_LT, TOK_GT])
+    return (prec_binary_or, ZeroOrMore(comparison_op, prec_binary_or))
 
+
+def binary_or_op():
+    return (Optional(comment), TOK_BINARY_OR, Optional(comment))
 
 def prec_binary_or():
-    return OneOrMore(prec_binary_and, sep=TOK_BINARY_OR)
+    return (prec_binary_and, ZeroOrMore(binary_or_op, prec_binary_and))
 
+
+def binary_and_op():
+    return (Optional(comment), TOK_BINARY_AND, Optional(comment))
 
 def prec_binary_and():
-    return OneOrMore(prec_binary_shift, sep=TOK_BINARY_AND)
+    return (prec_binary_shift, ZeroOrMore(binary_and_op, prec_binary_shift))
 
+
+def binary_shift_op():
+    return (Optional(comment), [TOK_BINARY_SHIFT_LEFT, TOK_BINARY_SHIFT_RIGHT], Optional(comment))
 
 def prec_binary_shift():
-    return OneOrMore(prec_addition, sep=[TOK_BINARY_SHIFT_LEFT, TOK_BINARY_SHIFT_RIGHT])
+    return (prec_addition, ZeroOrMore(binary_shift_op, prec_addition))
 
+
+def add_op():
+    return (Optional(comment), [TOK_ADD, TOK_SUBTRACT], Optional(comment))
 
 def prec_addition():
-    return OneOrMore(prec_multiplication, sep=[TOK_ADD, TOK_SUBTRACT])
+    return (prec_multiplication, ZeroOrMore(add_op, prec_multiplication))
 
+
+def mul_op():
+    return (Optional(comment), [TOK_MULTIPLY, TOK_DIVIDE, TOK_MODULO], Optional(comment))
 
 def prec_multiplication():
-    return OneOrMore(prec_unary, sep=[TOK_MULTIPLY, TOK_DIVIDE, TOK_MODULO])
+    return (prec_unary, ZeroOrMore(mul_op, prec_unary))
 
 
 def prec_unary():
@@ -590,12 +622,9 @@ def member_expr():
     return (TOK_PERIOD, member_name)
 
 
-def string_contents():
-    return _(r'([^"\\]|\\.|\\$)*', str_repr='string')
-
-
 def string_literal():
-    return (TOK_DQUOTE, string_contents, TOK_DQUOTE)
+    # Single regex to avoid arpeggio's skipws stripping leading whitespace inside quotes.
+    return _(r'"(?:[^"\\]|\\.|\\$)*"', str_repr='string')
 
 
 def primary():
@@ -632,7 +661,7 @@ def vector_elements():
 
 
 def vector_element():
-    return [listcomp_elements, expr]
+    return [listcomp_elements, commentable_expr]
 
 
 def listcomp_elements():

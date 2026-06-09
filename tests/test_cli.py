@@ -87,10 +87,27 @@ class TestCLIFormatOutput:
         assert rc == 0
         assert "module box(w, h)" in out
 
+    def test_format_preserves_line_comment(self):
+        out, err, rc = _run("--format", "-", stdin="// hello\nx = 1;")
+        assert rc == 0
+        assert "// hello" in out
+
+    def test_format_preserves_block_comment(self):
+        out, err, rc = _run("--format", "-", stdin="/* block */\nx = 1;")
+        assert rc == 0
+        assert "/* block */" in out
+
+    def test_format_preserves_comments_without_include_comments_flag(self):
+        # --format must preserve comments even without --include-comments
+        src = "// line comment\nx = 1; /* inline */"
+        out_format, _, _ = _run("--format", "-", stdin=src)
+        assert "// line comment" in out_format
+        assert "/* inline */" in out_format
+
 
 class TestCLIOptions:
     def test_include_comments(self):
-        out, err, rc = _run("--json", "--include-comments", "-", stdin="// hi\nx=1;")
+        out, err, rc = _run("--json", "--with-comments", "-", stdin="// hi\nx=1;")
         assert rc == 0
         data = json.loads(out)
         types = [n["_type"] for n in data]
@@ -109,6 +126,14 @@ class TestCLIOptions:
 class TestCLIErrors:
     def test_missing_file(self):
         out, err, rc = _run("/no/such/file.scad")
+        assert rc != 0
+        assert "openscad-parser" in err
+
+    def test_permission_denied(self, tmp_path):
+        f = tmp_path / "nope.scad"
+        f.write_text("x = 1;")
+        f.chmod(0o000)
+        out, err, rc = _run(str(f))
         assert rc != 0
         assert "openscad-parser" in err
 
@@ -179,7 +204,7 @@ class TestCLIMainInProcess:
         assert "_type: Assignment" in out
 
     def test_include_comments(self, monkeypatch, capsys):
-        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--include-comments", "-"])
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", "--with-comments", "-"])
         monkeypatch.setattr(sys, "stdin", io.StringIO("// hi\nx=1;"))
         main()
         out, _ = capsys.readouterr()
@@ -199,6 +224,17 @@ class TestCLIMainInProcess:
 
     def test_missing_file(self, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["openscad-parser", "/no/such/file.scad"])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        _, err = capsys.readouterr()
+        assert "openscad-parser" in err
+
+    def test_permission_denied(self, monkeypatch, capsys, tmp_path):
+        f = tmp_path / "nope.scad"
+        f.write_text("x = 1;")
+        f.chmod(0o000)
+        monkeypatch.setattr(sys, "argv", ["openscad-parser", str(f)])
         with pytest.raises(SystemExit) as exc:
             main()
         assert exc.value.code == 1

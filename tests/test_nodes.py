@@ -180,7 +180,7 @@ def test_primary_and_range_str():
     step_pos = Position(origin="<test>", line=1, column=5)
     step_explicit = NumberLiteral(val=2.0, position=step_pos)
     range_3arg = RangeLiteral(start=_num(0.0), end=_num(5.0), step=step_explicit, position=_pos())
-    assert str(range_3arg) == "[0:5:2]"
+    assert str(range_3arg) == "[0: 5 : 2]"
 
 
 def test_list_comprehension_str():

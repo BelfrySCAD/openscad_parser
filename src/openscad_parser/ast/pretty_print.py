@@ -1,7 +1,7 @@
 """Pretty-printer: convert an OpenSCAD AST back to formatted source code."""
 from __future__ import annotations
 from .nodes import (
-    ASTNode, Assignment, FunctionDeclaration, ModuleDeclaration,
+    ASTNode, Assignment, FunctionDeclaration, ModuleDeclaration, ParameterDeclaration,
     UseStatement, IncludeStatement,
     ModuleInstantiation,
     ModularCall, ModularFor,
@@ -10,12 +10,15 @@ from .nodes import (
     ModularIf, ModularIfElse,
     ModularModifierShowOnly, ModularModifierHighlight,
     ModularModifierBackground, ModularModifierDisable,
-    CommentLine, CommentSpan,
+    BlankLine,
+    CommentLine,
+    CommentSpan,
     TernaryOp,
     EchoOp,
     AssertOp,
     LetOp,
     UndefinedLiteral,
+    CommentedExpr,
     PrimaryCall,
     ListComprehension,
     ListCompFor,
@@ -43,10 +46,13 @@ def to_openscad(nodes: list[ASTNode], indent_width: int = 4) -> str:
     prev_complex = False
     for node in nodes:
         is_complex = isinstance(node, (ModuleDeclaration, FunctionDeclaration))
-        if parts and (is_complex or prev_complex):
+        is_blank = isinstance(node, BlankLine)
+        if parts and prev_complex and not is_blank:
+            parts.append("")
             parts.append("")
         parts.append(_fmt_node(node, 0, indent_width))
-        prev_complex = is_complex
+        if not is_blank:
+            prev_complex = is_complex
     return _coalesce_paren_bracket("\n".join(parts))
 
 
@@ -71,7 +77,19 @@ def _coalesce_paren_bracket(text: str) -> str:
 
 
 # Line length beyond which call arguments are formatted one-per-line.
-_MULTILINE_CHAR_LIMIT = 100
+_MULTILINE_CHAR_LIMIT = 80
+
+_BINARY_OP_SYMBOLS = {
+    'AdditionOp': '+', 'SubtractionOp': '-',
+    'MultiplicationOp': '*', 'DivisionOp': '/', 'ModuloOp': '%',
+    'ExponentOp': '^',
+    'BitwiseAndOp': '&', 'BitwiseOrOp': '|',
+    'BitwiseShiftLeftOp': '<<', 'BitwiseShiftRightOp': '>>',
+    'LogicalAndOp': '&&', 'LogicalOrOp': '||',
+    'EqualityOp': '==', 'InequalityOp': '!=',
+    'GreaterThanOp': '>', 'GreaterThanOrEqualOp': '>=',
+    'LessThanOp': '<', 'LessThanOrEqualOp': '<=',
+}
 
 # --- helpers ---
 
@@ -193,10 +211,13 @@ def _fmt_ternary_chain(expr: TernaryOp, indent: int, w: int) -> str:
     pad = " " * indent
     inner_pad = " " * (indent + w)
     parts = []
-    node: TernaryOp = expr
+    node = expr
     while isinstance(node, TernaryOp):
         parts.append((node.condition, node.true_expr))
         node = node.false_expr
+        # step through a CommentedExpr wrapper on the next ternary
+        if isinstance(node, CommentedExpr) and isinstance(node.expr, TernaryOp):
+            node = node.expr
     final = node
     lines = []
     for i, (cond, true_expr) in enumerate(parts):
@@ -210,18 +231,36 @@ def _fmt_ternary_chain(expr: TernaryOp, indent: int, w: int) -> str:
 def _fmt_expr(expr, indent: int, w: int) -> str:
     """Format an expression with indent-aware layout for ternary, assert, and echo."""
     pad = " " * indent
+    if isinstance(expr, CommentedExpr):
+        if any(isinstance(c, CommentLine) for c in expr.leading_comments):
+            # Line comments must end their line; split at last CommentLine.
+            inner_pad = " " * indent
+            last_ll = max(i for i, c in enumerate(expr.leading_comments) if isinstance(c, CommentLine))
+            line_part = expr.leading_comments[:last_ll + 1]
+            inline_part = expr.leading_comments[last_ll + 1:]
+            body_parts = [str(c) for c in inline_part]
+            body_parts.append(_fmt_expr(expr.expr, indent, w))
+            body_parts.extend(str(c) for c in expr.trailing_comments)
+            body = " ".join(body_parts)
+            all_lines = [str(c) for c in line_part] + [body]
+            return "\n".join([all_lines[0]] + [f"{inner_pad}{l}" for l in all_lines[1:]])
+        parts = [str(c) for c in expr.leading_comments]
+        parts.append(_fmt_expr(expr.expr, indent, w))
+        parts.extend(str(c) for c in expr.trailing_comments)
+        return " ".join(parts)
     if isinstance(expr, TernaryOp):
         # Right-chain of ternaries → flat cascade format
-        if isinstance(expr.false_expr, TernaryOp):
+        # Unwrap CommentedExpr on the false branch for chain detection
+        false_inner = expr.false_expr.expr if isinstance(expr.false_expr, CommentedExpr) else expr.false_expr
+        if isinstance(false_inner, TernaryOp):
             return _fmt_ternary_chain(expr, indent, w)
-        pad2 = " " * (indent + 2)
+        pad2 = " " * (indent + w)
         def _fmt_branch(branch):
-            # Nested ternary: 2 spaces per nesting level
             if isinstance(branch, TernaryOp):
-                return _fmt_expr(branch, indent + 2, w)
-            # All other expressions: their visual start is 2 chars into "? "/":", "
-            # so block content and closing delimiters align to indent + 4
-            return _fmt_expr(branch, indent + 4, w)
+                return _fmt_expr(branch, indent + w, w)
+            # Branch content visually starts 2 chars into "? "/":", so block
+            # content and closing delimiters align to indent + w + 2
+            return _fmt_expr(branch, indent + w + 2, w)
         return (
             f"{expr.condition}\n"
             f"{pad2}? {_fmt_branch(expr.true_expr)}\n"
@@ -247,7 +286,7 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
                 f"{pad}{_fmt_expr(expr.body, indent, w)}"
             )
         assigns = ", ".join(formatted)
-        return f"let({assigns})\n{inner_pad}{_fmt_expr(expr.body, indent + w, w)}"
+        return f"let({assigns})\n{pad}{_fmt_expr(expr.body, indent, w)}"
     if isinstance(expr, PrimaryCall):
         inline = str(expr)
         if len(inline) + indent > _MULTILINE_CHAR_LIMIT:
@@ -255,20 +294,74 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
                 str(expr.left), expr.arguments, indent, w,
                 fmt_fn=lambda a: _fmt_argument(a, indent + w, w),
             )
+    # Binary op where the left operand is a multiline list: keep [ on the
+    # first line and append " op rhs" to the closing ] line.
+    if hasattr(expr, 'left') and hasattr(expr, 'right'):
+        left_fmt = _fmt_expr(expr.left, indent, w)
+        if left_fmt.startswith("[\n"):
+            op = _BINARY_OP_SYMBOLS.get(type(expr).__name__)
+            if op is not None:
+                right_fmt = _fmt_expr(expr.right, indent, w)
+                return f"{left_fmt} {op} {right_fmt}"
     if isinstance(expr, ListComprehension):
         inner_pad = " " * (indent + w)
-        formatted_elems = [_fmt_list_elem(e, indent + w, w) for e in expr.elements]
-        any_multiline = any("\n" in fe for fe in formatted_elems)
-        if len(str(expr)) + indent > _MULTILINE_CHAR_LIMIT or any_multiline:
-            items = (",\n" + inner_pad).join(formatted_elems)
-            return f"[\n{inner_pad}{items}\n{pad}]"
+        # A leading CommentLine on element N was written after element N-1's comma
+        # in the source ("elem, // note\n next"). Render it as a trailing comment on
+        # N-1's line (after the comma), not as a standalone line before N.
+        from dataclasses import replace as _dc_replace
+        def _split_lcs(e):
+            """Return (leading_CommentLines, element_without_those_CommentLines)."""
+            if isinstance(e, CommentedExpr):
+                lcs = [c for c in e.leading_comments if isinstance(c, CommentLine)]
+                if lcs:
+                    rest = [c for c in e.leading_comments if not isinstance(c, CommentLine)]
+                    cleaned = (e.expr if not rest and not e.trailing_comments
+                               else _dc_replace(e, leading_comments=rest))
+                    return lcs, cleaned
+            return [], e
+        splits = [_split_lcs(e) for e in expr.elements]
+        has_line_comment = any(lcs for lcs, _ in splits)
+        formatted = [_fmt_list_elem(cleaned, indent + w, w) for _, cleaned in splits]
+        any_multiline = has_line_comment or any("\n" in fe for fe in formatted)
+        if not any_multiline:
+            inline = f"[{', '.join(formatted)}]"
+            if len(inline) + indent <= _MULTILINE_CHAR_LIMIT:
+                return inline
+        lines = []
+        for i, ((lcs, _), elem_str) in enumerate(zip(splits, formatted)):
+            comma = "" if i == len(expr.elements) - 1 else ","
+            if lcs:
+                # Append the comment(s) to the previous element's line, after its comma
+                comment_str = "  " + "  ".join(str(c) for c in lcs)
+                if lines:
+                    lines[-1] += comment_str
+                else:
+                    for c in lcs:
+                        lines.append(f"{inner_pad}{c}")
+            lines.append(f"{inner_pad}{elem_str}{comma}")
+        return "[\n" + "\n".join(lines) + f"\n{pad}]"
     return str(expr)
+
+
+def _fmt_parameter(param: ParameterDeclaration) -> str:
+    """Format a parameter declaration, including any leading/trailing comments."""
+    parts = [str(c) for c in param.leading_comments]
+    has_default = param.default is not None and not isinstance(param.default, UndefinedLiteral)
+    parts.append(f"{param.name}{'=' + str(param.default) if has_default else ''}")
+    parts.extend(str(c) for c in param.trailing_comments)
+    return " ".join(parts)
+
+
+def _join_str_params(params) -> str:
+    return ", ".join(_fmt_parameter(p) for p in params)
 
 
 def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
     """Format any top-level or block-body node."""
     pad = " " * indent
 
+    if isinstance(node, BlankLine):
+        return ""
     if isinstance(node, CommentLine):
         return f"{pad}//{node.text}"
     if isinstance(node, CommentSpan):
@@ -278,23 +371,41 @@ def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
     if isinstance(node, IncludeStatement):
         return f"{pad}include <{node.filepath.val}>"
     if isinstance(node, Assignment):
-        return f"{pad}{node.name} = {_fmt_expr(node.expr, indent, w)};"
+        rhs = _fmt_expr(node.expr, indent, w)
+        inline = f"{pad}{node.name} = {rhs};"
+        if rhs.startswith("[\n"):
+            # Re-format with ] one level from the assignment and content one
+            # level deeper — independent of variable name length.
+            rhs = _fmt_expr(node.expr, indent + w, w)
+            return f"{pad}{node.name} = {rhs};"
+        if len(inline.split("\n")[0]) > _MULTILINE_CHAR_LIMIT:
+            rhs2 = _fmt_expr(node.expr, indent + w, w)
+            return f"{pad}{node.name} =\n{' ' * (indent + w)}{rhs2};"
+        return inline
     if isinstance(node, FunctionDeclaration):
-        head = f"{pad}function {node.name}"
-        params_inline = _join_str(node.parameters)
+        pre = " ".join(str(c) for c in node.pre_name_comments)
+        post_n = " ".join(str(c) for c in node.post_name_comments)
+        post_p = " ".join(str(c) for c in node.post_params_comments)
+        head = f"{pad}function{' ' + pre if pre else ''} {node.name}{' ' + post_n if post_n else ''}"
+        params_inline = _join_str_params(node.parameters)
+        post_p_str = f" {post_p}" if post_p else ""
         expr_pad = " " * (indent + w)
-        if len(f"{head}({params_inline}) =") > _MULTILINE_CHAR_LIMIT:
-            param_block = _fmt_multiline_args(head, node.parameters, indent, w)
-            return f"{param_block} =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
-        return f"{head}({params_inline}) =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
+        if len(f"{head}({params_inline}){post_p_str} =") > _MULTILINE_CHAR_LIMIT:
+            param_block = _fmt_multiline_args(head, node.parameters, indent, w, fmt_fn=_fmt_parameter)
+            return f"{param_block}{post_p_str} =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
+        return f"{head}({params_inline}){post_p_str} =\n{expr_pad}{_fmt_expr(node.expr, indent + w, w)};"
     if isinstance(node, ModuleDeclaration):
-        head = f"{pad}module {node.name}"
-        params_inline = _join_str(node.parameters)
+        pre = " ".join(str(c) for c in node.pre_name_comments)
+        post_n = " ".join(str(c) for c in node.post_name_comments)
+        post_p = " ".join(str(c) for c in node.post_params_comments)
+        head = f"{pad}module{' ' + pre if pre else ''} {node.name}{' ' + post_n if post_n else ''}"
+        params_inline = _join_str_params(node.parameters)
+        post_p_str = f" {post_p}" if post_p else ""
         block = _fmt_block(node.children, indent, w)
-        if len(f"{head}({params_inline})") > _MULTILINE_CHAR_LIMIT:
-            param_block = _fmt_multiline_args(head, node.parameters, indent, w)
-            return f"{param_block} {block}"
-        return f"{head}({params_inline}) {block}"
+        if len(f"{head}({params_inline}){post_p_str}") > _MULTILINE_CHAR_LIMIT:
+            param_block = _fmt_multiline_args(head, node.parameters, indent, w, fmt_fn=_fmt_parameter)
+            return f"{param_block}{post_p_str} {block}"
+        return f"{head}({params_inline}){post_p_str} {block}"
     if isinstance(node, ModuleInstantiation):
         return _fmt_inst(node, indent, w)
     return f"{pad}{node}"  # pragma: no cover
@@ -336,6 +447,9 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
     """
     pad = " " * indent
 
+    if isinstance(node, Assignment):
+        return _fmt_node(node, indent, w)
+
     # Modifiers: push prefix down to the wrapped node
     if isinstance(node, ModularModifierShowOnly):
         return _fmt_inst(node.child, indent, w, "!" + prefix)
@@ -359,12 +473,26 @@ def _fmt_inst(node: ModuleInstantiation, indent: int, w: int, prefix: str = "") 
         return call + _fmt_child(node.children, indent, w)
 
     if isinstance(node, ModularFor):
-        assigns = _join_str(_as_list(node.assignments))
-        return f"{pad}{prefix}for ({assigns})" + _fmt_child(node.body, indent, w)
+        inner_pad = " " * (indent + w)
+        formatted = [_fmt_assign(a, indent + w, w) for a in _as_list(node.assignments)]
+        inline = f"{pad}{prefix}for ({', '.join(formatted)})"
+        if len(inline) > _MULTILINE_CHAR_LIMIT or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
+            head = f"{pad}{prefix}for (\n{inner_pad}{assign_lines}\n{pad})"
+        else:
+            head = inline
+        return head + _fmt_child(node.body, indent, w)
 
     if isinstance(node, ModularIntersectionFor):
-        assigns = _join_str(_as_list(node.assignments))
-        return f"{pad}{prefix}intersection_for ({assigns})" + _fmt_child(node.body, indent, w)
+        inner_pad = " " * (indent + w)
+        formatted = [_fmt_assign(a, indent + w, w) for a in _as_list(node.assignments)]
+        inline = f"{pad}{prefix}intersection_for ({', '.join(formatted)})"
+        if len(inline) > _MULTILINE_CHAR_LIMIT or any("\n" in fa for fa in formatted):
+            assign_lines = (",\n" + inner_pad).join(formatted)
+            head = f"{pad}{prefix}intersection_for (\n{inner_pad}{assign_lines}\n{pad})"
+        else:
+            head = inline
+        return head + _fmt_child(node.body, indent, w)
 
     if isinstance(node, ModularLet):
         inner_pad = " " * (indent + w)

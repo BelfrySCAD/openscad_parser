@@ -53,6 +53,24 @@ class TestLiteralASTNodes:
         assert isinstance(assignment.expr, StringLiteral)
         assert assignment.expr.val == "hello"
 
+    def test_empty_string_ast(self, parser):
+        """Test that an empty string produces a StringLiteral with empty val."""
+        code = 'x = "";'
+        ast = parse_ast(parser, code)
+        assignment = ast[0] if isinstance(ast, list) else ast
+        assert isinstance(assignment, Assignment)
+        assert isinstance(assignment.expr, StringLiteral)
+        assert assignment.expr.val == ""
+
+    def test_string_with_leading_spaces_ast(self, parser):
+        """Test that a string with leading spaces preserves those spaces in val."""
+        code = 'x = "  foo";'
+        ast = parse_ast(parser, code)
+        assignment = ast[0] if isinstance(ast, list) else ast
+        assert isinstance(assignment, Assignment)
+        assert isinstance(assignment.expr, StringLiteral)
+        assert assignment.expr.val == "  foo"
+
     def test_number_literal_ast(self, parser):
         """Test NumberLiteral AST node generation."""
         code = "x = 42;"

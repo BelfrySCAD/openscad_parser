@@ -346,17 +346,50 @@ class TestASTBuilderVisitorEdgeCases:
         with pytest.raises(ValueError, match="ternary_expr should have 3 Expression children"):
             visitor.visit_ternary_expr(node, [expr1, expr2])
 
-    def test_visit_string_contents(self):
-        """Test visit_string_contents behavior."""
+    def test_visit_string_literal(self):
+        """Test visit_string_literal strips surrounding double-quotes."""
         parser = getOpenSCADParser()
         visitor = ASTBuilderVisitor(parser)
 
         class MockNode:
-            value = "fallback"
+            value = '"hello world"'
+            position = 0
+            def __iter__(self):
+                return iter([])
 
         node = MockNode()
-        assert visitor.visit_string_contents(node, []) == "fallback"
-        assert visitor.visit_string_contents(node, ["a", "b"]) == "b"
+        result = visitor.visit_string_literal(node, [])
+        assert result.val == "hello world"
+
+    def test_visit_string_literal_empty(self):
+        """Test visit_string_literal handles empty string (just two double-quotes)."""
+        parser = getOpenSCADParser()
+        visitor = ASTBuilderVisitor(parser)
+
+        class MockNode:
+            value = '""'
+            position = 0
+            def __iter__(self):
+                return iter([])
+
+        node = MockNode()
+        result = visitor.visit_string_literal(node, [])
+        assert result.val == ""
+
+    def test_visit_string_literal_leading_spaces(self):
+        """Test visit_string_literal preserves leading spaces inside the quotes."""
+        parser = getOpenSCADParser()
+        visitor = ASTBuilderVisitor(parser)
+
+        class MockNode:
+            value = '"  foo"'
+            position = 0
+            def __iter__(self):
+                return iter([])
+
+        node = MockNode()
+        result = visitor.visit_string_literal(node, [])
+        assert result.val == "  foo"
 
     def test_visit_prec_unary_with_node_children(self):
         """Test visit_prec_unary using operator nodes from iterable node."""
@@ -419,20 +452,8 @@ class TestASTBuilderVisitorEdgeCases:
 
         none_methods = [
             visitor.visit_whitespace_only,
-            visitor.visit_TOK_LOGICAL_OR,
-            visitor.visit_TOK_LOGICAL_AND,
             visitor.visit_TOK_LOGICAL_NOT,
-            visitor.visit_TOK_BINARY_OR,
-            visitor.visit_TOK_BINARY_AND,
             visitor.visit_TOK_BINARY_NOT,
-            visitor.visit_TOK_BINARY_SHIFT_LEFT,
-            visitor.visit_TOK_BINARY_SHIFT_RIGHT,
-            visitor.visit_TOK_GT,
-            visitor.visit_TOK_LT,
-            visitor.visit_TOK_GTE,
-            visitor.visit_TOK_LTE,
-            visitor.visit_TOK_EQUAL,
-            visitor.visit_TOK_NOTEQUAL,
             visitor.visit_TOK_QUESTION,
             visitor.visit_TOK_EXPONENT,
             visitor.visit_MOD_SHOW_ONLY,
@@ -471,6 +492,20 @@ class TestASTBuilderVisitorEdgeCases:
 
         for method in none_methods:
             assert method(node, []) is None
+
+        # Operator visitors now return their string representation for comment-preservation
+        assert visitor.visit_TOK_LOGICAL_OR(node, []) == '||'
+        assert visitor.visit_TOK_LOGICAL_AND(node, []) == '&&'
+        assert visitor.visit_TOK_BINARY_OR(node, []) == '|'
+        assert visitor.visit_TOK_BINARY_AND(node, []) == '&'
+        assert visitor.visit_TOK_BINARY_SHIFT_LEFT(node, []) == '<<'
+        assert visitor.visit_TOK_BINARY_SHIFT_RIGHT(node, []) == '>>'
+        assert visitor.visit_TOK_GT(node, []) == '>'
+        assert visitor.visit_TOK_LT(node, []) == '<'
+        assert visitor.visit_TOK_GTE(node, []) == '>='
+        assert visitor.visit_TOK_LTE(node, []) == '<='
+        assert visitor.visit_TOK_EQUAL(node, []) == '=='
+        assert visitor.visit_TOK_NOTEQUAL(node, []) == '!='
 
     def test_visit_name_rules(self):
         """Test visit_* name rules return the first child."""
@@ -725,94 +760,34 @@ class TestASTBuilderVisitorEdgeCases:
         assert isinstance(multi_comment, CommentSpan)
         assert multi_comment.text == " world "
 
-    def test_visit_prec_equality_fallback(self):
-        """Test visit_prec_equality fallback path."""
-        parser = getOpenSCADParser()
-        visitor = ASTBuilderVisitor(parser)
-        
-        from openscad_parser.ast.nodes import NumberLiteral, EqualityOp
-        
-        # Create a node that will trigger the fallback
-        class MockNode:
-            position = 0
-            def __iter__(self):
-                raise TypeError("Cannot iterate")
-        
-        node = MockNode()
-        expr1 = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        expr2 = NumberLiteral(val=2.0, position=Position("", 1, 1))
-        
-        result = visitor.visit_prec_equality(node, [expr1, expr2])
-        assert isinstance(result, EqualityOp)
+    def test_visit_prec_equality_equal(self):
+        """Test visit_prec_equality builds EqualityOp from ==."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment, EqualityOp
+        nodes = getASTfromString("x = a == b;")
+        assert isinstance(nodes[0], Assignment)
+        assert isinstance(nodes[0].expr, EqualityOp)
 
-    def test_visit_prec_comparison_fallback(self):
-        """Test visit_prec_comparison fallback path."""
-        parser = getOpenSCADParser()
-        visitor = ASTBuilderVisitor(parser)
-        
-        from openscad_parser.ast.nodes import NumberLiteral, LessThanOp
-        
-        class MockNode:
-            position = 0
-            def __iter__(self):
-                raise TypeError("Cannot iterate")
-        
-        node = MockNode()
-        expr1 = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        expr2 = NumberLiteral(val=2.0, position=Position("", 1, 1))
-        
-        result = visitor.visit_prec_comparison(node, [expr1, expr2])
-        assert isinstance(result, LessThanOp)
+    def test_visit_prec_equality_notequal(self):
+        """Test visit_prec_equality builds InequalityOp from !=."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment, InequalityOp
+        nodes = getASTfromString("x = a != b;")
+        assert isinstance(nodes[0].expr, InequalityOp)
 
-    def test_visit_prec_equality_unknown_operator(self):
-        """Test visit_prec_equality with unknown operator."""
-        parser = getOpenSCADParser()
-        visitor = ASTBuilderVisitor(parser)
-        
-        from openscad_parser.ast.nodes import NumberLiteral, EqualityOp
-        
-        class MockOperator:
-            rule_name = "UNKNOWN_OP"
-        
-        class MockNode:
-            position = 0
-            def __iter__(self):
-                return iter([NumberLiteral(val=1.0, position=Position("", 1, 1)), 
-                           MockOperator(),
-                           NumberLiteral(val=2.0, position=Position("", 1, 1))])
-        
-        node = MockNode()
-        expr1 = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        expr2 = NumberLiteral(val=2.0, position=Position("", 1, 1))
-        
-        result = visitor.visit_prec_equality(node, [expr1, expr2])
-        # Should default to equality
-        assert isinstance(result, EqualityOp)
+    def test_visit_prec_comparison_less(self):
+        """Test visit_prec_comparison builds LessThanOp from <."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment, LessThanOp
+        nodes = getASTfromString("x = a < b;")
+        assert isinstance(nodes[0].expr, LessThanOp)
 
-    def test_visit_prec_comparison_unknown_operator(self):
-        """Test visit_prec_comparison with unknown operator."""
-        parser = getOpenSCADParser()
-        visitor = ASTBuilderVisitor(parser)
-        
-        from openscad_parser.ast.nodes import NumberLiteral, LessThanOp
-        
-        class MockOperator:
-            rule_name = "UNKNOWN_OP"
-        
-        class MockNode:
-            position = 0
-            def __iter__(self):
-                return iter([NumberLiteral(val=1.0, position=Position("", 1, 1)), 
-                           MockOperator(),
-                           NumberLiteral(val=2.0, position=Position("", 1, 1))])
-        
-        node = MockNode()
-        expr1 = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        expr2 = NumberLiteral(val=2.0, position=Position("", 1, 1))
-        
-        result = visitor.visit_prec_comparison(node, [expr1, expr2])
-        # Should default to less than
-        assert isinstance(result, LessThanOp)
+    def test_visit_prec_comparison_greater(self):
+        """Test visit_prec_comparison builds GreaterThanOp from >."""
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.nodes import Assignment, GreaterThanOp
+        nodes = getASTfromString("x = a > b;")
+        assert isinstance(nodes[0].expr, GreaterThanOp)
 
     def test_visit_prec_binary_or_fallback(self):
         """Test visit_prec_binary_or fallback path."""
