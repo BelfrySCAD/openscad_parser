@@ -622,12 +622,9 @@ def member_expr():
     return (TOK_PERIOD, member_name)
 
 
-def string_contents():
-    return _(r'([^"\\]|\\.|\\$)*', str_repr='string')
-
-
 def string_literal():
-    return (TOK_DQUOTE, string_contents, TOK_DQUOTE)
+    # Single regex to avoid arpeggio's skipws stripping leading whitespace inside quotes.
+    return _(r'"(?:[^"\\]|\\.|\\$)*"', str_repr='string')
 
 
 def primary():

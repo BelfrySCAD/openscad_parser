@@ -257,14 +257,11 @@ class ASTBuilderVisitor(PTNodeVisitor):
             position=self._get_node_position(node)
         )
 
-    def visit_string_contents(self, node, children):
-        return str(children[-1]) if children else str(node.value)
-
     def visit_string_literal(self, node, children):
-        # Grammar: (TOK_DQUOTE, _(r'([^"\\]|\\.|\\$)*', str_repr='string'), TOK_DQUOTE)
-        # After visiting: [string_content] (TOK_DQUOTE nodes return None)
-        # The string content is a Terminal node, extract its value
-        value = children[-1] if children else str(node.value)
+        # Grammar: single regex matching the full quoted string including quotes.
+        # Strip the surrounding double-quotes to get the raw content.
+        raw = str(node.value)
+        value = raw[1:-1] if raw.startswith('"') and raw.endswith('"') else raw
         return StringLiteral(
             val=value,
             position=self._get_node_position(node)

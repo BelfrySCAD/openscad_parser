@@ -374,9 +374,9 @@ def _fmt_node(node: ASTNode, indent: int, w: int) -> str:
         rhs = _fmt_expr(node.expr, indent, w)
         inline = f"{pad}{node.name} = {rhs};"
         if rhs.startswith("[\n"):
-            # Re-format so ] aligns with [: pass the column of [ as indent.
-            bracket_col = indent + len(str(node.name)) + 3
-            rhs = _fmt_expr(node.expr, bracket_col, w)
+            # Re-format with ] one level from the assignment and content one
+            # level deeper — independent of variable name length.
+            rhs = _fmt_expr(node.expr, indent + w, w)
             return f"{pad}{node.name} = {rhs};"
         if len(inline.split("\n")[0]) > _MULTILINE_CHAR_LIMIT:
             rhs2 = _fmt_expr(node.expr, indent + w, w)
