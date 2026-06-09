@@ -10,6 +10,7 @@ from .nodes import (
     ASTNode,
     CommentLine,
     CommentSpan,
+    CommentedExpr,
     Expression,
     Primary,
     Identifier,
@@ -337,11 +338,8 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
         del _ast_cache[cache_key]
     
     # Read the file
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            code = f.read()
-    except Exception as e:
-        raise Exception(f"Error reading file {file}: {e}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        code = f.read()
     
     # Create source map and process includes if requested
     source_map = SourceMap()

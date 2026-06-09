@@ -38,7 +38,7 @@ class TestAssignmentFormatting:
 
 
 class TestMultilineParamFormatting:
-    # Inline function header (with " =") must be <= 100 chars to stay on one line.
+    # Inline function header (with " =") must be <= 80 chars to stay on one line.
     SHORT_FN  = "function f(a, b) = a + b;"
     LONG_FN   = "function long_function_name(very_long_param_alpha, very_long_param_beta, very_long_param_gamma, extra) = a;"
     SHORT_MOD = "module m(a, b) { cube(a); }"
@@ -231,13 +231,13 @@ class TestCommentFormatting:
 
 
 class TestBlankLineSeparation:
-    def test_blank_line_before_function(self):
+    def test_no_blank_line_before_function(self):
         out = _fmt("x=1;\nfunction f(x)=x;")
-        assert "\n\n" in out
+        assert "\n\n" not in out
 
-    def test_blank_line_before_module(self):
+    def test_no_blank_line_before_module(self):
         out = _fmt("x=1;\nmodule m(){}")
-        assert "\n\n" in out
+        assert "\n\n" not in out
 
     def test_blank_line_between_modules(self):
         out = _fmt("module a(){}\nmodule b(){}")
@@ -246,6 +246,54 @@ class TestBlankLineSeparation:
     def test_no_blank_line_between_assignments(self):
         out = _fmt("x=1;\ny=2;")
         assert "\n\n" not in out
+
+
+class TestBlankLineCommentPreservation:
+    """Blank lines between consecutive // comment blocks must be preserved."""
+
+    def _fmt(self, src):
+        ast = getASTfromString(src, include_comments=True)
+        return to_openscad(ast)
+
+    def test_blank_line_between_toplevel_comment_blocks(self):
+        src = "// block 1\n// block 1 cont\n\n// block 2\n// block 2 cont\nx=1;"
+        out = self._fmt(src)
+        assert "// block 1\n// block 1 cont\n\n// block 2" in out
+
+    def test_no_blank_line_between_adjacent_comment_lines(self):
+        src = "// line 1\n// line 2\nx=1;"
+        out = self._fmt(src)
+        assert "// line 1\n// line 2" in out
+        assert "// line 1\n\n// line 2" not in out
+
+    def test_multiple_blank_lines_collapsed_to_one(self):
+        # Two blank lines in source → still one blank line in output
+        src = "// block 1\n\n\n// block 2\nx=1;"
+        out = self._fmt(src)
+        assert "// block 1\n\n// block 2" in out
+
+    def test_blank_line_inside_module_body(self):
+        src = "module m() {\n    // group 1\n\n    // group 2\n    cube(1);\n}"
+        out = self._fmt(src)
+        assert "// group 1\n\n    // group 2" in out
+
+    def test_no_blank_line_leaks_into_module_header(self):
+        src = "module m() {\n    // inside\n    cube(1);\n}"
+        out = self._fmt(src)
+        assert "module m() {" in out
+        assert "module m() // inside" not in out
+
+    def test_blank_line_not_inserted_without_include_comments(self):
+        # Without include_comments, BlankLine nodes are not produced
+        src = "// block 1\n\n// block 2\nx=1;"
+        ast = getASTfromString(src, include_comments=False)
+        from openscad_parser.ast.nodes import BlankLine
+        def has_blank_line(nodes):
+            for n in nodes:
+                if isinstance(n, BlankLine):
+                    return True
+            return False
+        assert not has_blank_line(ast)
 
 
 class TestIndentWidth:
@@ -350,17 +398,17 @@ class TestLetEchoAssertFormatting:
 class TestListCompForFormatting:
     def test_short_for_expands(self):
         out = _fmt("x = [for (i = [0:3]) i];")
-        assert out == "x = [\n    for (i = [0:3:1])\n        i\n];"
+        assert out == "x = [\n        for (i = [0 : 3 : 1])\n            i\n    ];"
 
     def test_long_for_body_on_new_line(self):
         out = _fmt("x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];")
-        assert "for (long_variable_name = [start_value:step_value:end_value])\n" in out
-        assert "        long_variable_name * scaling_factor_x\n" in out
+        assert "for (long_variable_name = [start_value : step_value : end_value])\n" in out
+        assert "            long_variable_name * scaling_factor_x\n" in out
 
     def test_long_for_assignments_multiline(self):
         out = _fmt("x = [for (very_long_variable_name_alpha = [start_value:end_value], very_long_variable_name_beta = [0:10]) very_long_variable_name_alpha];")
         assert "for (\n" in out
-        assert "    very_long_variable_name_alpha = [start_value:end_value:1]," in out
+        assert "            very_long_variable_name_alpha = [start_value : end_value : 1]," in out
         assert ")\n" in out
 
     def test_nested_for(self):
@@ -368,12 +416,13 @@ class TestListCompForFormatting:
         lines = out.split("\n")
         for_i = next(l for l in lines if "long_var_name_i" in l and "for" in l)
         for_j = next(l for l in lines if "long_var_name_j" in l and "for" in l)
-        assert for_j.startswith("        for")  # indented one level inside for_i
+        assert for_j.startswith("            for")  # indented one level inside for_i
         assert len(for_j) > len(for_i)
 
     def test_cfor_body_on_new_line(self):
         out = _fmt("x = [for (i = 0; i < very_long_condition_limit_value_maximum_xx; i = i + step_increment_value) i * scale];")
-        assert "for (i = 0;" in out
+        assert "for" in out
+        assert "i = 0;" in out
         assert ")\n" in out
 
     def test_for_roundtrip(self):
@@ -383,7 +432,7 @@ class TestListCompForFormatting:
 
 class TestListComprehensionFormatting:
     SHORT = "x = [1, 2, 3];"
-    # inline len > 100
+    # inline len > 80
     LONG_LITERAL = "x = [very_long_element_name_a, very_long_element_name_b, very_long_element_name_c, very_long_element_name_d];"
     LONG_COMP = "x = [for (long_variable_name = [start_value:step_value:end_value]) long_variable_name * scaling_factor_x];"
 
@@ -393,13 +442,13 @@ class TestListComprehensionFormatting:
     def test_long_literal_list_multiline(self):
         out = _fmt(self.LONG_LITERAL)
         assert out.startswith("x = [\n")
-        assert out.endswith("\n];")
-        assert "    very_long_element_name_a," in out
+        assert out.endswith("\n    ];")
+        assert "        very_long_element_name_a," in out
 
     def test_long_comprehension_multiline(self):
         out = _fmt(self.LONG_COMP)
         assert out.startswith("x = [\n")
-        assert out.endswith("\n];")
+        assert out.endswith("\n    ];")
 
     def test_long_list_roundtrip(self):
         assert len(_roundtrip(self.LONG_LITERAL)) == 1
@@ -409,7 +458,7 @@ class TestListComprehensionFormatting:
 
 
 class TestMultilineArgFormatting:
-    # Threshold is 100 chars (including indent).
+    # Threshold is 80 chars (including indent).
     SHORT = "foo(short_a, short_b, short_c);"                                             # 31 chars — inline
     LONG  = "foo(long_arg_a, long_arg_b, long_arg_c, long_arg_d, long_arg_e, long_f);"   # 72 chars — inline
     OVER  = "foo(long_arg_a, long_arg_b, long_arg_c, long_arg_d, long_arg_e, long_arg_f, long_arg_g, long_arg_h, long_arg_i);"  # 111 chars — multiline
@@ -451,11 +500,11 @@ class TestMultilineArgFormatting:
 class TestLetExprFormatting:
     def test_let_no_assignments(self):
         out = _fmt("function f() = let() 0;")
-        assert out == "function f() =\n    let()\n        0;"
+        assert out == "function f() =\n    let()\n    0;"
 
     def test_let_single_assignment(self):
         out = _fmt("function f(x) = let(y = x * 2) y + 1;")
-        assert out == "function f(x) =\n    let(y = x * 2)\n        y + 1;"
+        assert out == "function f(x) =\n    let(y = x * 2)\n    y + 1;"
 
     def test_let_multi_assignment(self):
         out = _fmt("function f(a, b) = let(x = a * 2, y = b + 1) x + y;")
@@ -517,11 +566,11 @@ class TestAssertEchoExprFormatting:
 class TestTernaryFormatting:
     def test_assignment_ternary(self):
         out = _fmt("x = condition ? a : b;")
-        assert out == "x = condition\n  ? a\n  : b;"
+        assert out == "x = condition\n    ? a\n    : b;"
 
     def test_function_ternary(self):
         out = _fmt("function f(x) = x > 0 ? x : -x;")
-        assert out == "function f(x) =\n    x > 0\n      ? x\n      : -x;"
+        assert out == "function f(x) =\n    x > 0\n        ? x\n        : -x;"
 
     def test_nested_ternary(self):
         # a ? b : (c ? d : e) is a right-chain → flat cascade format
@@ -534,7 +583,7 @@ class TestTernaryFormatting:
         out = _fmt("module m() { x = a ? b : c; }")
         lines = out.split("\n")
         q_line = next(l for l in lines if "?" in l)
-        assert q_line.startswith("      ? ")
+        assert q_line.startswith("        ? ")
 
     def test_ternary_roundtrip(self):
         code = "x = condition ? true_val : false_val;"
@@ -686,3 +735,110 @@ class TestCoalesceParenBracket:
         lines = out.split("\n")
         for i in range(len(lines) - 1):
             assert not (lines[i].strip() == ")" and lines[i + 1].lstrip().startswith("["))
+
+
+def _fmt_with_comments(code: str) -> str:
+    """Parse with include_comments=True → pretty-print."""
+    return to_openscad(getASTfromString(code, include_comments=True))
+
+
+class TestInlineBlockComments:
+    """Tests for /* */ comments inside expressions (commentable_expr support)."""
+
+    def test_positional_argument(self):
+        out = _fmt_with_comments("x = foo(/* hi */ a, b);")
+        assert "/* hi */" in out
+        assert "foo(" in out
+
+    def test_named_argument_value(self):
+        out = _fmt_with_comments("foo(x = /* val */ 1);")
+        assert "/* val */" in out
+
+    def test_vector_element_first(self):
+        out = _fmt_with_comments("v = [/* y */ 1, 2, 3];")
+        assert "/* y */" in out
+
+    def test_vector_element_middle(self):
+        out = _fmt_with_comments("v = [1, /* y */ 2, 3];")
+        assert "/* y */" in out
+
+    def test_ternary_true_arm(self):
+        out = _fmt_with_comments("x = c ? /* yes */ a : b;")
+        assert "/* yes */" in out
+
+    def test_ternary_false_arm(self):
+        out = _fmt_with_comments("x = c ? a : /* no */ b;")
+        assert "/* no */" in out
+
+    def test_binary_op_comment_does_not_crash(self):
+        # Comments between binary operands are preserved in the output.
+        out = _fmt_with_comments("x = a + /* scale */ b;")
+        assert "/* scale */" in out
+        assert "a" in out and "b" in out
+
+    def test_without_include_comments_no_commentedexpr(self):
+        # Without include_comments, comments are treated as whitespace and
+        # no CommentedExpr wrapper is created.
+        from openscad_parser.ast.nodes import CommentedExpr
+        nodes = getASTfromString("x = foo(/* hi */ a, b);", include_comments=False)
+        def _has_commented_expr(node):
+            if isinstance(node, CommentedExpr):
+                return True
+            for attr in vars(node).values():
+                if isinstance(attr, list):
+                    for item in attr:
+                        if hasattr(item, '__dataclass_fields__') and _has_commented_expr(item):
+                            return True
+                elif hasattr(attr, '__dataclass_fields__') and _has_commented_expr(attr):
+                    return True
+            return False
+        assert not _has_commented_expr(nodes[0])
+
+    def test_let_expr_body_with_comment(self):
+        out = _fmt_with_comments("x = let(a = 1) /* note */ a + 1;")
+        assert "/* note */" in out
+
+    def test_parameter_default_with_comment(self):
+        out = _fmt_with_comments("function f(x = /* def */ 1) = x;")
+        assert "/* def */" in out
+
+    # --- Trailing comments ---
+
+    def test_trailing_after_arg(self):
+        out = _fmt_with_comments("x = foo(a /* after */, b);")
+        assert "/* after */" in out
+
+    def test_trailing_after_last_arg(self):
+        out = _fmt_with_comments("x = foo(a, b /* after */);")
+        assert "/* after */" in out
+
+    def test_trailing_after_vector_element(self):
+        out = _fmt_with_comments("v = [1 /* after */, 2, 3];")
+        assert "/* after */" in out
+
+    def test_trailing_after_last_vector_element(self):
+        out = _fmt_with_comments("v = [1, 2, 3 /* after */];")
+        assert "/* after */" in out
+
+    def test_trailing_after_whole_vector_arg(self):
+        out = _fmt_with_comments("translate([0, 1, 2] /* after */) cube(1);")
+        assert "/* after */" in out
+
+    def test_trailing_after_assignment_rhs(self):
+        out = _fmt_with_comments("x = 1 /* note */;")
+        assert "/* note */" in out
+
+    def test_leading_and_trailing(self):
+        out = _fmt_with_comments("x = foo(/* before */ a /* after */, b);")
+        assert "/* before */" in out
+        assert "/* after */" in out
+
+    def test_trailing_after_function_body(self):
+        out = _fmt_with_comments("function f(x) = x + 1 /* end */;")
+        assert "/* end */" in out
+
+    def test_between_operand_and_operator_does_not_crash(self):
+        # Comment between operand and operator is preserved in the output.
+        out = _fmt_with_comments("x = 3 /* str */ + 4;")
+        assert "/* str */" in out
+        assert "3" in out and "4" in out

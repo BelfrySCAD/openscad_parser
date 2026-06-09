@@ -6,6 +6,29 @@ from .source_map import SourceMap
 from .nodes import *
 
 
+def _insert_blank_lines(nodes: list) -> list:
+    """Insert BlankLine between consecutive CommentLine nodes with a blank line between them.
+
+    Detects the gap by comparing source line numbers: if the next CommentLine
+    starts more than one line after the previous one ended, a blank line existed.
+    """
+    result = []
+    prev = None
+    for node in nodes:
+        if (
+            prev is not None
+            and isinstance(prev, CommentLine)
+            and isinstance(node, CommentLine)
+            and getattr(getattr(prev, 'position', None), 'line', None) is not None
+            and getattr(getattr(node, 'position', None), 'line', None) is not None
+            and node.position.line > prev.position.line + 1
+        ):
+            result.append(BlankLine(position=node.position))
+        result.append(node)
+        prev = node
+    return result
+
+
 class _CForParts:
     """Wrapper returned by c_for_inits/c_for_incrs visitors.
 
@@ -276,46 +299,46 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return None
 
     def visit_TOK_LOGICAL_OR(self, node, children):
-        return None
+        return '||'
 
     def visit_TOK_LOGICAL_AND(self, node, children):
-        return None
+        return '&&'
 
     def visit_TOK_LOGICAL_NOT(self, node, children):
         return None
 
     def visit_TOK_BINARY_OR(self, node, children):
-        return None
+        return '|'
 
     def visit_TOK_BINARY_AND(self, node, children):
-        return None
+        return '&'
 
     def visit_TOK_BINARY_NOT(self, node, children):
         return None
 
     def visit_TOK_BINARY_SHIFT_LEFT(self, node, children):
-        return None
+        return '<<'
 
     def visit_TOK_BINARY_SHIFT_RIGHT(self, node, children):
-        return None
+        return '>>'
 
     def visit_TOK_GT(self, node, children):
-        return None
+        return '>'
 
     def visit_TOK_LT(self, node, children):
-        return None
+        return '<'
 
     def visit_TOK_GTE(self, node, children):
-        return None
+        return '>='
 
     def visit_TOK_LTE(self, node, children):
-        return None
+        return '<='
 
     def visit_TOK_EQUAL(self, node, children):
-        return None
+        return '=='
 
     def visit_TOK_NOTEQUAL(self, node, children):
-        return None
+        return '!='
 
     def visit_TOK_QUESTION(self, node, children):
         return None
@@ -469,14 +492,38 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return children[0]
 
     def visit_parameter_with_default(self, node, children):
-        return ParameterDeclaration(name=children[0], default=children[1], position=self._get_node_position(node))
+        items = list(children)
+        name_idx = next((i for i, c in enumerate(items) if isinstance(c, Identifier)), None)
+        if name_idx is None:
+            name = items[0] if items else None
+            default = items[1] if len(items) > 1 else None
+            return ParameterDeclaration(name=name, default=default, position=self._get_node_position(node))
+        name = items[name_idx]
+        leading = [c for c in items[:name_idx] if isinstance(c, (CommentSpan, CommentLine))]
+        # trailing: CommentSpan between name and the default expr
+        # default is the last Expression that is not the Identifier
+        default = next((c for c in reversed(items) if isinstance(c, Expression) and c is not name), None)
+        if default is None:
+            exprs = children.commentable_expr if hasattr(children, 'commentable_expr') else []
+            default = exprs[0] if exprs else None
+        default_idx = next((i for i, c in enumerate(items) if c is default), len(items))
+        trailing = [c for c in items[name_idx + 1:default_idx] if isinstance(c, (CommentSpan, CommentLine))]
+        return ParameterDeclaration(name=name, default=default, leading_comments=leading,
+                                    trailing_comments=trailing, position=self._get_node_position(node))
 
     def visit_parameter_without_default(self, node, children):
-        name = children[0] if children else Identifier(
-            name=getattr(node, "value", ""),
-            position=self._get_node_position(node)
-        )
-        return ParameterDeclaration(name=name, default=None, position=self._get_node_position(node))
+        items = list(children)
+        name_idx = next((i for i, c in enumerate(items) if isinstance(c, Identifier)), None)
+        if name_idx is None:
+            name = items[0] if items else None
+            if name is None:
+                name = Identifier(name=getattr(node, "value", ""), position=self._get_node_position(node))
+            return ParameterDeclaration(name=name, default=None, position=self._get_node_position(node))
+        name = items[name_idx]
+        leading = [c for c in items[:name_idx] if isinstance(c, (CommentSpan, CommentLine))]
+        trailing = [c for c in items[name_idx + 1:] if isinstance(c, (CommentSpan, CommentLine))]
+        return ParameterDeclaration(name=name, default=None, leading_comments=leading,
+                                    trailing_comments=trailing, position=self._get_node_position(node))
 
 
     # --- Arguments ---
@@ -500,36 +547,34 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return PositionalArgument(expr=children[0], position=self._get_node_position(node))
 
     def visit_named_argument(self, node, children):
-        return NamedArgument(name=children[0], expr=children[1], position=self._get_node_position(node))
+        if hasattr(children, "variable_name") and children.variable_name:
+            name = children.variable_name[0]
+            exprs = children.commentable_expr or children.expr
+            expr = exprs[0] if exprs else None
+        else:
+            name, expr = children[0], children[1] if len(children) > 1 else None
+        return NamedArgument(name=name, expr=expr, position=self._get_node_position(node))
 
     # --- Module/Function Declarations ---
 
     def visit_module_definition(self, node, children):
-        # Grammar: (KWD_MODULE, module_name, parameter_block, statement)
-        # After visiting: [Identifier, parameters, statement] (KWD_MODULE returns None)
-        if hasattr(children, "module_name"):
-            name = children.module_name[0] if children.module_name else None
-            parameters = children.get_rule("parameter_block")
-            statement = list(children.statement) if hasattr(children, "statement") and children.statement else []
-        else:
+        # Grammar: (KWD_MODULE, ZeroOrMore(comment), module_name, ZeroOrMore(comment), parameter_block, ZeroOrMore(comment), statement)
+        # Use rule_map for reliable name/params lookup, flat children for structural comments.
+        name = children.module_name[0] if hasattr(children, "module_name") and children.module_name else None
+        parameters = children.get_rule("parameter_block") if hasattr(children, "get_rule") else None
+        statement = list(children.statement) if hasattr(children, "statement") and children.statement else []
+        # Fallback for plain-list children (edge case tests)
+        if name is None and not hasattr(children, "module_name"):
             name = children[0] if children else None
             parameters = children[1] if len(children) > 1 else []
-            statement = children[2] if len(children) > 2 else []
         if name is None:
             raise ValueError("module_definition should have a name")
         if parameters is None:
             parameters = []  # pragma: no cover
         if not isinstance(parameters, list):
             parameters = [parameters]  # pragma: no cover
-        if statement is None:
-            statement = []  # pragma: no cover
         if not isinstance(statement, list):
             statement = [statement]
-        # Flatten nested statement lists. Include all statements (assignments,
-        # function/module declarations, module instantiations) so scope build
-        # can hoist declarations and attach scopes to every node.
-        # Filter out None values that may result from visit_statement() returning
-        # None for statement nodes with no children.
         flattened = []
         stack = list(statement)
         while stack:
@@ -538,16 +583,40 @@ class ASTBuilderVisitor(PTNodeVisitor):
                 stack = item + stack
             elif item is not None:
                 flattened.append(item)
-        return ModuleDeclaration(name=name, parameters=parameters, children=flattened, position=self._get_node_position(node))
+        # Extract structural comments using rule_map["comment"] — these are *only*
+        # the comments matched by ZeroOrMore(comment) directly in module_definition's
+        # grammar (pre-name, post-name, post-params).  Comments from inside the
+        # statement_block body appear in rule_map["statement"], not here.
+        direct_comments_ids = {id(c) for c in (children.comment if hasattr(children, 'comment') else [])}
+        items = list(children)
+        name_flat_idx = next((i for i, c in enumerate(items) if c is name), None)
+        last_param_flat_idx = max(
+            (i for i, c in enumerate(items) if isinstance(c, ParameterDeclaration)),
+            default=name_flat_idx if name_flat_idx is not None else -1
+        )
+        pre_name, post_name, post_params = [], [], []
+        if name_flat_idx is not None:
+            pre_name = [c for i, c in enumerate(items)
+                        if id(c) in direct_comments_ids and i < name_flat_idx]
+            post_name = [c for i, c in enumerate(items)
+                         if id(c) in direct_comments_ids and name_flat_idx < i <= last_param_flat_idx]
+            post_params = [c for i, c in enumerate(items)
+                           if id(c) in direct_comments_ids and i > last_param_flat_idx]
+        return ModuleDeclaration(name=name, parameters=parameters, children=flattened,
+                                 pre_name_comments=pre_name, post_name_comments=post_name,
+                                 post_params_comments=post_params,
+                                 position=self._get_node_position(node))
 
     def visit_function_definition(self, node, children):
-        # Grammar: (KWD_FUNCTION, function_name, parameter_block, TOK_ASSIGN, expr, TOK_SEMICOLON)
-        # After visiting: [Identifier, parameters, expr] (KWD_FUNCTION, TOK_ASSIGN, TOK_SEMICOLON return None)
-        if hasattr(children, "function_name"):
-            name = children.function_name[0] if children.function_name else None
-            parameters = children.get_rule("parameter_block")
-            expr = children.expr[0] if hasattr(children, "expr") and children.expr else None
-        else:
+        # Grammar: (KWD_FUNCTION, ZeroOrMore(comment), function_name, ZeroOrMore(comment),
+        #           parameter_block, ZeroOrMore(comment), TOK_ASSIGN, commentable_expr, TOK_SEMICOLON)
+        # Use rule_map for reliable name/params/expr lookup, flat children for structural comments.
+        name = children.function_name[0] if hasattr(children, "function_name") and children.function_name else None
+        parameters = children.get_rule("parameter_block") if hasattr(children, "get_rule") else None
+        expr_candidates = (children.commentable_expr or children.expr) if hasattr(children, "commentable_expr") else []
+        expr = expr_candidates[0] if expr_candidates else None
+        # Fallback for plain-list children (edge case tests)
+        if name is None and not hasattr(children, "function_name"):
             name = children[0] if children else None
             parameters = children[1] if len(children) > 1 else []
             expr = children[2] if len(children) > 2 else None
@@ -559,7 +628,29 @@ class ASTBuilderVisitor(PTNodeVisitor):
             parameters = []  # pragma: no cover
         if not isinstance(parameters, list):
             parameters = [parameters]  # pragma: no cover
-        return FunctionDeclaration(name=name, parameters=parameters, expr=expr, position=self._get_node_position(node))
+        # Extract structural comments using rule_map["comment"] — only comments
+        # matched directly by ZeroOrMore(comment) in function_definition's grammar
+        # (pre-name, post-name, post-params/pre-equals).  Comments from inside
+        # commentable_expr are wrapped in CommentedExpr, not individually here.
+        direct_comments_ids = {id(c) for c in (children.comment if hasattr(children, 'comment') else [])}
+        items = list(children)
+        name_flat_idx = next((i for i, c in enumerate(items) if c is name), None)
+        last_param_flat_idx = max(
+            (i for i, c in enumerate(items) if isinstance(c, ParameterDeclaration)),
+            default=name_flat_idx if name_flat_idx is not None else -1
+        )
+        pre_name, post_name, post_params = [], [], []
+        if name_flat_idx is not None:
+            pre_name = [c for i, c in enumerate(items)
+                        if id(c) in direct_comments_ids and i < name_flat_idx]
+            post_name = [c for i, c in enumerate(items)
+                         if id(c) in direct_comments_ids and name_flat_idx < i <= last_param_flat_idx]
+            post_params = [c for i, c in enumerate(items)
+                           if id(c) in direct_comments_ids and i > last_param_flat_idx]
+        return FunctionDeclaration(name=name, parameters=parameters, expr=expr,
+                                   pre_name_comments=pre_name, post_name_comments=post_name,
+                                   post_params_comments=post_params,
+                                   position=self._get_node_position(node))
     
     def visit_use_include_file(self, node, children):
         if not children:
@@ -595,359 +686,195 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return [child for child in children if child is not None and isinstance(child, Assignment)]  # pragma: no cover
     
     def visit_assignment_expr(self, node, children):
-        # Grammar: (variable_name, TOK_ASSIGN, expr)
-        # After visiting: [Identifier, expr] (TOK_ASSIGN returns None)
-        if len(children) < 2:
+        # Grammar: (ZeroOrMore(comment), variable_name, TOK_ASSIGN, commentable_expr)
+        if hasattr(children, "variable_name") and children.variable_name:
+            name = children.variable_name[0]
+            exprs = children.commentable_expr or children.expr
+            expr = exprs[0] if exprs else None
+        else:
+            if len(children) < 2:
+                raise ValueError("assignment_expr should have an Expression child")
+            name, expr = children[0], children[1]
+        if expr is None:
             raise ValueError("assignment_expr should have an Expression child")
-        return Assignment(name=children[0], expr=children[1], position=self._get_node_position(node))
+        return Assignment(name=name, expr=expr, position=self._get_node_position(node))
     
     def visit_let_expr(self, node, children):
-        # Grammar: (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, expr)
-        # After visiting: [assignments_list, expr] (KWD_LET, TOK_PAREN, TOK_ENDPAREN return None)
-        if hasattr(children, "assignments_expr"):
-            assignments = children.get_rule("assignments_expr")
-            body = children.expr[0] if hasattr(children, "expr") and children.expr else None
-        else:
-            assignments = children[0] if len(children) > 0 else []
-            body = children[1] if len(children) > 1 else None
+        # Grammar: (KWD_LET, TOK_PAREN, assignments_expr, TOK_ENDPAREN, commentable_expr)
+        # After visiting: [assignments_list, body_expr]
+        assignments = children.get_rule("assignments_expr") if hasattr(children, "assignments_expr") else (children[0] if children else [])
+        exprs = [c for c in children if isinstance(c, Expression)]
+        body = exprs[-1] if exprs else None
         if body is None:
             raise ValueError("let_expr should have an Expression body")
         return LetOp(assignments=assignments, body=body, position=self._get_node_position(node))
 
+    def _build_binop_chain(self, children, node, make_node):
+        """Build a left-associative binary op chain, preserving adjacent comments.
+
+        children is the flat list from visit_prec_* (after *_op visitors flatten
+        their results). Sequence: expr [comment* op_str comment* expr]*.
+
+        Comments before an operator become trailing comments on the left operand;
+        comments after an operator become leading comments on the right operand.
+        make_node(left, op_str_or_None, right, position) -> Expression.
+        """
+        items = list(children)
+        if not items:
+            raise ValueError("empty binary op chain")
+        if len(items) == 1 and isinstance(items[0], Expression):
+            return items[0]
+        result = items[0]
+        i = 1
+        while i < len(items):
+            pre_comments = []
+            while i < len(items) and isinstance(items[i], (CommentSpan, CommentLine)):
+                pre_comments.append(items[i]); i += 1
+            op_str = None
+            if i < len(items) and isinstance(items[i], str):
+                op_str = items[i]; i += 1
+            post_comments = []
+            while i < len(items) and isinstance(items[i], (CommentSpan, CommentLine)):
+                post_comments.append(items[i]); i += 1
+            if i >= len(items) or not isinstance(items[i], Expression):
+                break
+            right = items[i]; i += 1
+            if pre_comments:
+                if isinstance(result, CommentedExpr):
+                    result = CommentedExpr(
+                        leading_comments=result.leading_comments,
+                        trailing_comments=result.trailing_comments + pre_comments,
+                        expr=result.expr, position=result.position)
+                else:
+                    result = CommentedExpr(leading_comments=[], trailing_comments=pre_comments,
+                                           expr=result, position=result.position)
+            if post_comments:
+                if isinstance(right, CommentedExpr):
+                    right = CommentedExpr(
+                        leading_comments=post_comments + right.leading_comments,
+                        trailing_comments=right.trailing_comments,
+                        expr=right.expr, position=right.position)
+                else:
+                    right = CommentedExpr(leading_comments=post_comments, trailing_comments=[],
+                                          expr=right, position=right.position)
+            result = make_node(result, op_str, right, self._get_node_position(node))
+        return result
+
+    # --- Binary operator sub-rules (return list so comments surface to parent) ---
+
+    def visit_logical_or_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_logical_and_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_equality_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_comparison_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_binary_or_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_binary_and_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_binary_shift_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_add_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_mul_op(self, node, children):
+        return [c for c in children if c is not None]
+
+    def visit_commentable_expr(self, node, children):
+        expr = next((c for c in children if isinstance(c, Expression) and not isinstance(c, (CommentSpan, CommentLine))), None)
+        if expr is None:
+            return children[0] if children else UndefinedLiteral(position=self._get_node_position(node))
+        expr_idx = next(i for i, c in enumerate(children) if c is expr)
+        leading = [c for c in children[:expr_idx] if isinstance(c, (CommentSpan, CommentLine))]
+        trailing = [c for c in children[expr_idx + 1:] if isinstance(c, (CommentSpan, CommentLine))]
+        if leading or trailing:
+            return CommentedExpr(
+                leading_comments=leading,
+                trailing_comments=trailing,
+                expr=expr,
+                position=self._get_node_position(node),
+            )
+        return expr
+
     def visit_assert_expr(self, node, children):
-        # Grammar: (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
-        # After visiting: [arguments_list, expr or None] (KWD_ASSERT, TOK_PAREN, TOK_ENDPAREN return None)
-        if hasattr(children, "arguments"):
-            arguments = children.get_rule("arguments")
-            body = children.expr[0] if hasattr(children, "expr") and children.expr else None
-        else:
-            arguments = children[0] if len(children) > 0 else []
-            body = children[1] if len(children) > 1 else None
+        # Grammar: (KWD_ASSERT, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(commentable_expr))
+        arguments = children.get_rule("arguments") if hasattr(children, "arguments") else (children[0] if children else [])
+        exprs = [c for c in children if isinstance(c, Expression)]
+        body = exprs[-1] if exprs else None
         if body is None:
             body = UndefinedLiteral(position=self._get_node_position(node))
         return AssertOp(arguments=arguments, body=body, position=self._get_node_position(node))
 
     def visit_echo_expr(self, node, children):
-        # Grammar: (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(expr))
-        # After visiting: [arguments_list, expr or None] (KWD_ECHO, TOK_PAREN, TOK_ENDPAREN return None)
-        if hasattr(children, "arguments"):
-            arguments = children.get_rule("arguments")
-            body = children.expr[0] if hasattr(children, "expr") and children.expr else None
-        else:
-            arguments = children[0] if len(children) > 0 else []
-            body = children[1] if len(children) > 1 else None
+        # Grammar: (KWD_ECHO, TOK_PAREN, arguments, TOK_ENDPAREN, Optional(commentable_expr))
+        arguments = children.get_rule("arguments") if hasattr(children, "arguments") else (children[0] if children else [])
+        exprs = [c for c in children if isinstance(c, Expression)]
+        body = exprs[-1] if exprs else None
         if body is None:
             body = UndefinedLiteral(position=self._get_node_position(node))
         return EchoOp(arguments=arguments, body=body, position=self._get_node_position(node))
     
     def visit_ternary_expr(self, node, children):
-        # Grammar: (prec_logical_or, TOK_QUESTION, expr, TOK_COLON, expr)
-        # After visiting: [condition, true_expr, false_expr] (TOK_QUESTION and TOK_COLON return None)
-        if hasattr(children, "prec_logical_or"):
-            condition = children.prec_logical_or[0] if children.prec_logical_or else None
-            exprs = children.expr if hasattr(children, "expr") else []
-        else:
-            condition = children[0] if len(children) > 0 else None
-            exprs = children[1:] if len(children) > 1 else []
-        true_expr = exprs[0] if len(exprs) > 0 else None
-        false_expr = exprs[1] if len(exprs) > 1 else None
-        if condition is None or true_expr is None or false_expr is None:
+        # Grammar: (prec_logical_or, TOK_QUESTION, commentable_expr, TOK_COLON, commentable_expr)
+        # After visiting: [condition, true_expr, false_expr] — flat list of Expression nodes;
+        # TOK_QUESTION and TOK_COLON return None (filtered out).
+        exprs = [c for c in children if isinstance(c, Expression)]
+        if len(exprs) < 3:
             raise ValueError("ternary_expr should have 3 Expression children (condition, true, false)")
+        condition, true_expr, false_expr = exprs[0], exprs[1], exprs[2]
         return TernaryOp(condition=condition, true_expr=true_expr, false_expr=false_expr, position=self._get_node_position(node))
     
     def visit_prec_logical_or(self, node, children):
-        # prec_logical_or rule: OneOrMore(prec_logical_and, sep=TOK_LOGICAL_OR)
-        # Build left-associative tree
-        if len(children) == 1:
-            return children[0]
-        result = children[0]
-        for i in range(1, len(children)):
-            result = LogicalOrOp(left=result, right=children[i], position=self._get_node_position(node))
-        return result
-    
+        return self._build_binop_chain(children, node,
+            lambda l, op, r, pos: LogicalOrOp(left=l, right=r, position=pos))
+
     def visit_prec_logical_and(self, node, children):
-        # prec_logical_and rule: OneOrMore(prec_equality, sep=TOK_LOGICAL_AND)
-        if len(children) == 1:
-            return children[0]
-        result = children[0]
-        for i in range(1, len(children)):
-            result = LogicalAndOp(left=result, right=children[i], position=self._get_node_position(node))
-        return result
-    
+        return self._build_binop_chain(children, node,
+            lambda l, op, r, pos: LogicalAndOp(left=l, right=r, position=pos))
+
     def visit_prec_equality(self, node, children):
-        # prec_equality rule: OneOrMore(prec_comparison, sep=[TOK_EQUAL, TOK_NOTEQUAL])
-        # The node structure is: [prec_comparison, operator, prec_comparison, operator, ...]
-        # But Terminal nodes (operators) return None from _visit_node, so we need to access raw children
-        if len(children) == 1:
-            return children[0]
-        
-        # Get raw node children to access operators
-        try:
-            node_children = list(node)
-            # node_children alternates: operand, operator, operand, operator, ...
-            # children list has only the operands (Terminal nodes filtered out)
-            result = children[0]
-            operand_idx = 1  # Index into children list (operands only)
-            
-            for i in range(1, len(node_children), 2):  # Skip every other (operators)
-                if i < len(node_children):
-                    operator_node = node_children[i]
-                    # Check if it's TOK_EQUAL or TOK_NOTEQUAL
-                    if hasattr(operator_node, 'rule_name'):
-                        if operator_node.rule_name == 'TOK_EQUAL':
-                            operator = '=='
-                        elif operator_node.rule_name == 'TOK_NOTEQUAL':
-                            operator = '!='
-                        else:
-                            operator = operator_node.value if hasattr(operator_node, 'value') else str(operator_node)
-                    else:
-                        operator = operator_node.value if hasattr(operator_node, 'value') else str(operator_node)  # pragma: no cover
-                    
-                    if operand_idx < len(children):
-                        right_operand = children[operand_idx]
-                        if operator == '==' or operator == 'TOK_EQUAL':
-                            result = EqualityOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        elif operator == '!=' or operator == 'TOK_NOTEQUAL':
-                            result = InequalityOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        else:
-                            # Default to equality if unknown operator
-                            result = EqualityOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        operand_idx += 1
-        except (TypeError, AttributeError, IndexError):
-            # Fallback: if we can't access raw children, default to equality
-            result = children[0]
-            for i in range(1, len(children)):
-                result = EqualityOp(left=result, right=children[i], position=self._get_node_position(node))
-        
-        return result
-    
+        def make(l, op, r, pos):
+            return InequalityOp(left=l, right=r, position=pos) if op == '!=' else EqualityOp(left=l, right=r, position=pos)
+        return self._build_binop_chain(children, node, make)
+
     def visit_prec_comparison(self, node, children):
-        # prec_comparison rule: OneOrMore(prec_binary_or, sep=[TOK_LTE, TOK_GTE, TOK_LT, TOK_GT])
-        # The node structure is: [prec_binary_or, operator, prec_binary_or, operator, ...]
-        # Operators are NonTerminal nodes with rule_name TOK_LT, TOK_GT, TOK_LTE, or TOK_GTE
-        if len(children) == 1:
-            return children[0]
-        
-        # Get raw node children to access operators
-        try:
-            node_children = list(node)
-            # node_children alternates: operand, operator, operand, operator, ...
-            # children list has only the operands (operators might be filtered out or included)
-            result = children[0]
-            operand_idx = 1  # Index into children list (operands only)
-            
-            for i in range(1, len(node_children), 2):  # Skip every other (operators)
-                if i < len(node_children):
-                    operator_node = node_children[i]
-                    # Check the rule_name to determine the operator
-                    if hasattr(operator_node, 'rule_name'):
-                        operator_rule = operator_node.rule_name
-                    else:
-                        operator_rule = None  # pragma: no cover
-                    
-                    if operand_idx < len(children):
-                        right_operand = children[operand_idx]
-                        if operator_rule == 'TOK_LT':
-                            result = LessThanOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        elif operator_rule == 'TOK_GT':
-                            result = GreaterThanOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        elif operator_rule == 'TOK_LTE':
-                            result = LessThanOrEqualOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        elif operator_rule == 'TOK_GTE':
-                            result = GreaterThanOrEqualOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        else:
-                            # Default to less than if unknown operator
-                            result = LessThanOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        operand_idx += 1
-        except (TypeError, AttributeError, IndexError):
-            # Fallback: if we can't access raw children, default to less than
-            result = children[0]
-            for i in range(1, len(children)):
-                result = LessThanOp(left=result, right=children[i], position=self._get_node_position(node))
-        
-        return result
-    
+        _cmp = {'<': LessThanOp, '>': GreaterThanOp, '<=': LessThanOrEqualOp, '>=': GreaterThanOrEqualOp}
+        def make(l, op, r, pos):
+            return _cmp.get(op, LessThanOp)(left=l, right=r, position=pos)
+        return self._build_binop_chain(children, node, make)
+
     def visit_prec_binary_or(self, node, children):
-        # prec_binary_or rule: OneOrMore(prec_binary_and, sep=TOK_BINARY_OR)
-        # The children list contains: operands (AST nodes) and operators (NonTerminal nodes with rule_name TOK_BINARY_OR)
-        # Operators are passed through from _visit_node since there's no visit_TOK_BINARY_OR method
-        if len(children) == 1:
-            return children[0]
-        
-        # Separate operands (Expression AST nodes) from operators (NonTerminal nodes with rule_name TOK_BINARY_OR)
-        # The children list should alternate: operand, operator, operand, operator, ...
-        # But we need to handle the case where operators might be mixed in
-        operands = [child for child in children if isinstance(child, Expression)]
-        operators = [child for child in children if hasattr(child, 'rule_name') and child.rule_name == 'TOK_BINARY_OR']
-        
-        if len(operands) == 1:
-            return operands[0]  # pragma: no cover
-        
-        if len(operands) != len(operators) + 1:
-            # Fallback: if structure is unexpected, just chain operands with bitwise or
-            result = operands[0]
-            for i in range(1, len(operands)):
-                result = BitwiseOrOp(left=result, right=operands[i], position=self._get_node_position(node))
-            return result
-        
-        if True:  # pragma: no cover
-            result = operands[0]
-            for i in range(len(operators)):
-                if i + 1 < len(operands):
-                    result = BitwiseOrOp(left=result, right=operands[i + 1], position=self._get_node_position(node))
-            return result
-        return None  # pragma: no cover
-    
+        return self._build_binop_chain(children, node,
+            lambda l, op, r, pos: BitwiseOrOp(left=l, right=r, position=pos))
+
     def visit_prec_binary_and(self, node, children):
-        # prec_binary_and rule: OneOrMore(prec_binary_shift, sep=TOK_BINARY_AND)
-        # The node structure is: [prec_binary_shift, operator, prec_binary_shift, operator, ...]
-        # Operators are NonTerminal nodes with rule_name TOK_BINARY_AND
-        if len(children) == 1:
-            return children[0]
-        
-        # Get raw node children to access operators
-        try:
-            node_children = list(node)
-            result = children[0]
-            operand_idx = 1  # Index into children list (operands only)
-            
-            for i in range(1, len(node_children), 2):  # Skip every other (operators)
-                if i < len(node_children):
-                    operator_node = node_children[i]
-                    # Check the rule_name to determine the operator
-                    if hasattr(operator_node, 'rule_name'):
-                        operator_rule = operator_node.rule_name
-                    else:
-                        operator_rule = None  # pragma: no cover
-                    
-                    if operand_idx < len(children):
-                        right_operand = children[operand_idx]
-                        if operator_rule == 'TOK_BINARY_AND':
-                            result = BitwiseAndOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        else:
-                            # Default to bitwise and if unknown operator (shouldn't happen for prec_binary_and)
-                            result = BitwiseAndOp(left=result, right=right_operand, position=self._get_node_position(node))  # pragma: no cover
-                        operand_idx += 1
-        except (TypeError, AttributeError, IndexError):  # pragma: no cover
-            # Fallback: if we can't access raw children, default to bitwise and
-            result = children[0]
-            for i in range(1, len(children)):
-                result = BitwiseAndOp(left=result, right=children[i], position=self._get_node_position(node))
-        
-        return result
-    
+        return self._build_binop_chain(children, node,
+            lambda l, op, r, pos: BitwiseAndOp(left=l, right=r, position=pos))
+
     def visit_prec_binary_shift(self, node, children):
-        # prec_binary_shift rule: OneOrMore(prec_addition, sep=[TOK_BINARY_SHIFT_LEFT, TOK_BINARY_SHIFT_RIGHT])
-        # The node structure is: [prec_addition, operator, prec_addition, operator, ...]
-        # Operators are NonTerminal nodes with rule_name TOK_BINARY_SHIFT_LEFT or TOK_BINARY_SHIFT_RIGHT
-        if len(children) == 1:
-            return children[0]
-        
-        # Get raw node children to access operators
-        try:
-            node_children = list(node)
-            result = children[0]
-            operand_idx = 1  # Index into children list (operands only)
-            
-            for i in range(1, len(node_children), 2):  # Skip every other (operators)
-                if i < len(node_children):
-                    operator_node = node_children[i]
-                    if hasattr(operator_node, 'rule_name'):
-                        operator_rule = operator_node.rule_name
-                    else:
-                        operator_rule = None  # pragma: no cover
-                    
-                    if operand_idx < len(children):
-                        right_operand = children[operand_idx]
-                        if operator_rule == 'TOK_BINARY_SHIFT_LEFT':
-                            result = BitwiseShiftLeftOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        elif operator_rule == 'TOK_BINARY_SHIFT_RIGHT':
-                            result = BitwiseShiftRightOp(left=result, right=right_operand, position=self._get_node_position(node))
-                        else:
-                            # Default to shift left if unknown operator
-                            result = BitwiseShiftLeftOp(left=result, right=right_operand, position=self._get_node_position(node))  # pragma: no cover
-                        operand_idx += 1
-        except (TypeError, AttributeError, IndexError):  # pragma: no cover
-            # Fallback: if we can't access raw children, default to shift left
-            result = children[0]
-            for i in range(1, len(children)):
-                result = BitwiseShiftLeftOp(left=result, right=children[i], position=self._get_node_position(node))
-        
-        return result
-    
+        def make(l, op, r, pos):
+            return BitwiseShiftRightOp(left=l, right=r, position=pos) if op == '>>' else BitwiseShiftLeftOp(left=l, right=r, position=pos)
+        return self._build_binop_chain(children, node, make)
+
     def visit_prec_addition(self, node, children):
-        # prec_addition rule: OneOrMore(prec_multiplication, sep=['+', '-'])
-        # The children list contains: operands (Expression AST nodes) and operators (Terminal nodes with values '+', '-')
-        # Operators are Terminal nodes passed through from _visit_node
-        if len(children) == 1:
-            return children[0]
-        
-        # Separate operands (Expression AST nodes) from operators (Terminal nodes with values '+', '-')
-        operands = [child for child in children if isinstance(child, Expression)]
-        operators = [child for child in children if not isinstance(child, Expression) and not isinstance(child, ASTNode)]
-        
-        if len(operands) == 1:
-            return operands[0]  # pragma: no cover
-        
-        if len(operands) != len(operators) + 1:  # pragma: no cover
-            # Fallback: if structure is unexpected, just chain operands with addition
-            result = operands[0]
-            for i in range(1, len(operands)):
-                result = AdditionOp(left=result, right=operands[i], position=self._get_node_position(node))
-            return result
-        
-        result = operands[0]
-        for i in range(len(operators)):
-            if i + 1 < len(operands):
-                operator = operators[i] if isinstance(operators[i], str) else (getattr(operators[i], 'value', operators[i]) if hasattr(operators[i], 'value') else str(operators[i]))
-                right_operand = operands[i + 1]
-                if operator == '+':
-                    result = AdditionOp(left=result, right=right_operand, position=self._get_node_position(node))
-                elif operator == '-':
-                    result = SubtractionOp(left=result, right=right_operand, position=self._get_node_position(node))
-                else:
-                    # Default to addition if unknown operator
-                    result = AdditionOp(left=result, right=right_operand, position=self._get_node_position(node))  # pragma: no cover
-        
-        return result
-    
+        def make(l, op, r, pos):
+            return SubtractionOp(left=l, right=r, position=pos) if op == '-' else AdditionOp(left=l, right=r, position=pos)
+        return self._build_binop_chain(children, node, make)
+
     def visit_prec_multiplication(self, node, children):
-        # prec_multiplication rule: OneOrMore(prec_unary, sep=['*', '/', '%'])
-        # The children list contains: operands (Expression AST nodes) and operators (Terminal nodes with values '*', '/', '%')
-        # Operators are Terminal nodes passed through from _visit_node
-        if len(children) == 1:
-            return children[0]
-        
-        # Separate operands (Expression AST nodes) from operators (Terminal nodes with values '*', '/', '%')
-        operands = [child for child in children if isinstance(child, Expression)]
-        operators = [child for child in children if not isinstance(child, Expression) and not isinstance(child, ASTNode)]
-        
-        if len(operands) == 1:
-            return operands[0]  # pragma: no cover
-        
-        if len(operands) != len(operators) + 1:  # pragma: no cover
-            # Fallback: if structure is unexpected, just chain operands with multiplication
-            result = operands[0]
-            for i in range(1, len(operands)):
-                result = MultiplicationOp(left=result, right=operands[i], position=self._get_node_position(node))
-            return result
-        
-        result = operands[0]
-        for i in range(len(operators)):
-            if i + 1 < len(operands):
-                operator = operators[i] if isinstance(operators[i], str) else (getattr(operators[i], 'value', operators[i]) if hasattr(operators[i], 'value') else str(operators[i]))
-                right_operand = operands[i + 1]
-                if operator == '*':
-                    result = MultiplicationOp(left=result, right=right_operand, position=self._get_node_position(node))  # pragma: no cover
-                elif operator == '/':
-                    result = DivisionOp(left=result, right=right_operand, position=self._get_node_position(node))
-                elif operator == '%':
-                    result = ModuloOp(left=result, right=right_operand, position=self._get_node_position(node))
-                else:
-                    # Default to multiplication if unknown operator
-                    result = MultiplicationOp(left=result, right=right_operand, position=self._get_node_position(node))
-        
-        return result
+        _mul = {'*': MultiplicationOp, '/': DivisionOp, '%': ModuloOp}
+        def make(l, op, r, pos):
+            return _mul.get(op, MultiplicationOp)(left=l, right=r, position=pos)
+        return self._build_binop_chain(children, node, make)
     
     def visit_prec_unary(self, node, children):
         # prec_unary rule: (ZeroOrMore(['+', '-', TOK_LOGICAL_NOT, TOK_BINARY_NOT]), prec_exponent)
@@ -1254,7 +1181,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return []
 
     def visit_statement_block(self, node, children):
-        return list(children)
+        return _insert_blank_lines(list(children))
 
     def visit_statement(self, node, children):
         # Grammar: [empty_statement, statement_block, module_definition, function_definition, module_instantiation, assignment]
@@ -1298,7 +1225,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
     
     def visit_openscad_language(self, node, children) -> list[ASTNode]:
         return list(children)
-    
+
     def visit_openscad_language_with_comments(self, node, children) -> list[ASTNode]:
-        return list(children)
+        return _insert_blank_lines(list(children))
 

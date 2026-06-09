@@ -85,13 +85,35 @@ class TestComments:
     @pytest.mark.parametrize("i", list(range(40)))
     def test_comments_everywhere(self, i, parser, parser_comments):
         """Tests that comments in multiple possible lexical locations are parsed
-        correctly. Comments that can be parsed correctly using include_comments
-        are included in the `successfully_parsed_locations_when_include_comments_is_set`
-        variable. Every value not in this list does not parse correctly when
-        include_comments is set to true on the parser"""
-        successfully_parsed_locations_when_include_comments_is_set = {
-            0, 7, 8, 16, 24, 25, 26, 34, 35, 36, 37, 38, 39,
-            # 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 27, 28, 29, 30, 31, 32, 33 # Broken
+        correctly.
+
+        Block comments (/* */) now succeed at expression positions (inside
+        argument lists and vector literals) in addition to statement boundaries,
+        because the grammar includes commentable_expr.  Inline comments (//)
+        still fail inside expressions because commentable_expr only accepts
+        comment_multi, not comment_line.
+        """
+        # Positions where /* */ block comments are accepted with include_comments
+        block_comment_success_locations = {
+            0, 7, 8,
+            1, 2, 3, 4, 5, 6,        # around module name, parameter list, and body brace
+            10, 11, 12, 13, 14, 15,  # inside / around translate([...]) arg
+            16,
+            18, 19, 20, 21, 22, 23,  # inside / around rotate([...]) arg
+            24, 25, 26,
+            28, 29, 30, 31, 32, 33,  # inside / around cube([...]) arg
+            34, 35, 36, 37, 38, 39,
+        }
+        # Positions where // inline comments are accepted with include_comments
+        inline_comment_success_locations = {
+            0, 7, 8,
+            1, 2, 3, 4, 5, 6,        # around module name, parameter list, and body brace
+            10, 11, 12, 13, 14, 15,  # inside / around translate([...]) arg
+            16,
+            18, 19, 20, 21, 22, 23,  # inside / around rotate([...]) arg
+            24, 25, 26,
+            28, 29, 30, 31, 32, 33,  # inside / around cube([...]) arg
+            34, 35, 36, 37, 38, 39,
         }
 
         possible_comment_location_count = 40
@@ -123,7 +145,7 @@ class TestComments:
         block_tree = parse_tree_template.format(*block_tree_args)
 
         parse_success(parser, block_code, parse_tree)
-        if i in successfully_parsed_locations_when_include_comments_is_set:
+        if i in block_comment_success_locations:
             parse_success(parser_comments, block_code, block_tree)
         else:
             parse_failure(parser_comments, block_code)
@@ -138,7 +160,7 @@ class TestComments:
         inline_tree = parse_tree_template.format(*inline_tree_args)
 
         parse_success(parser, inline_code, parse_tree)
-        if i in successfully_parsed_locations_when_include_comments_is_set:
+        if i in inline_comment_success_locations:
             parse_success(parser_comments, inline_code, inline_tree)
         else:
             parse_failure(parser_comments, inline_code)

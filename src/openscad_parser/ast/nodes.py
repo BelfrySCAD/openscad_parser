@@ -54,6 +54,23 @@ class CommentLine(ASTNode):
 
 
 @dataclass
+class BlankLine(ASTNode):
+    """A preserved blank line between consecutive single-line comment blocks.
+
+    OpenSCAD documentation generators treat a blank line between ``//`` comment
+    blocks as a paragraph separator.  When ``include_comments=True``, the builder
+    inserts a ``BlankLine`` node wherever consecutive ``CommentLine`` nodes in the
+    source are separated by at least one blank line.
+    """
+
+    def __str__(self):
+        return ""
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+
+
+@dataclass
 class CommentSpan(ASTNode):
     """Represents a multi-line OpenSCAD comment span.
     
@@ -86,6 +103,37 @@ class Expression(ASTNode):
     All expression nodes in the AST inherit from this class.
     """
     pass
+
+
+@dataclass
+class CommentedExpr(Expression):
+    """An expression preceded and/or followed by inline block comments.
+
+    Produced when include_comments=True and /* */ appears adjacent to a
+    sub-expression (argument value, vector element, ternary arm, etc.).
+
+    Attributes:
+        leading_comments: Block comments before the expression, in source order.
+        trailing_comments: Block comments after the expression, in source order.
+        expr: The wrapped expression.
+    """
+    leading_comments: list["CommentSpan | CommentLine"]
+    trailing_comments: list["CommentSpan | CommentLine"]
+    expr: Expression
+
+    def __str__(self):
+        parts = [str(c) for c in self.leading_comments]
+        parts.append(str(self.expr))
+        parts.extend(str(c) for c in self.trailing_comments)
+        return " ".join(parts)
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
+        for c in self.leading_comments:
+            c.build_scope(parent_scope)
+        for c in self.trailing_comments:
+            c.build_scope(parent_scope)
+        self.expr.build_scope(parent_scope)
 
 
 @dataclass
@@ -218,21 +266,25 @@ class UndefinedLiteral(Primary):
 @dataclass 
 class ParameterDeclaration(ASTNode):
     """Represents a parameter declaration in a function or module definition.
-    
+
     Parameters can be declared with or without default values. Parameters without
     defaults are required when calling the function/module.
-    
+
     Examples:
         function foo(x) = x;              // Required parameter
         function bar(x=10) = x;          // Optional parameter with default
         module test(a, b=2, c) { ... }  // Mixed required and optional
-    
+
     Attributes:
         name: The parameter name as an Identifier.
         default: The default value expression, or None if no default is provided.
+        leading_comments: Comments appearing before the parameter name.
+        trailing_comments: Comments appearing after the parameter name (before = or ,/).
     """
     name: Identifier
     default: Expression|None
+    leading_comments: list["CommentSpan"] = field(default_factory=list)
+    trailing_comments: list["CommentSpan"] = field(default_factory=list)
 
     def __str__(self):
         has_default = self.default is not None and not isinstance(self.default, UndefinedLiteral)
@@ -240,7 +292,11 @@ class ParameterDeclaration(ASTNode):
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
+        for c in self.leading_comments:
+            c.build_scope(parent_scope)
         self.name.build_scope(parent_scope)
+        for c in self.trailing_comments:
+            c.build_scope(parent_scope)
         if self.default:
             # Default is evaluated in the caller scope (parent of parameter scope)
             caller_scope = parent_scope.parent if parent_scope.parent else parent_scope
@@ -337,7 +393,7 @@ class RangeLiteral(Primary):
     step: Expression
 
     def __str__(self):
-        return f"[{self.start}:{self.end}:{self.step}]"
+        return f"[{self.start} : {self.end} : {self.step}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1413,7 +1469,40 @@ class ListComprehension(Expression):
     elements: list[VectorElement]
     
     def __str__(self):
-        return f"[{', '.join(str(element) for element in self.elements)}]"
+        # A leading CommentLine on element N was written after element N-1's comma
+        # in the source ("elem, // note\n next_elem"). Render it as a trailing
+        # comment on N-1's line (after the comma).  An inline representation is
+        # broken because the `//` would eat all subsequent elements on the same line.
+        # This fallback uses a fixed 4-space indent; the pretty-printer's _fmt_expr
+        # path produces context-aware indentation when called directly.
+        def _split(e):
+            if isinstance(e, CommentedExpr):
+                lcs = [c for c in e.leading_comments if isinstance(c, CommentLine)]
+                if lcs:
+                    rest = [c for c in e.leading_comments if not isinstance(c, CommentLine)]
+                    trail = e.trailing_comments
+                    parts = (
+                        [str(c) for c in rest]
+                        + [str(e.expr)]
+                        + [str(c) for c in trail]
+                    )
+                    return lcs, " ".join(parts)
+            return [], str(e)
+        splits = [_split(e) for e in self.elements]
+        if not any(lcs for lcs, _ in splits):
+            return f"[{', '.join(s for _, s in splits)}]"
+        lines: list[str] = []
+        for i, (lcs, elem_str) in enumerate(splits):
+            comma = "," if i < len(self.elements) - 1 else ""
+            if lcs:
+                comment_str = "  " + "  ".join(str(c) for c in lcs)
+                if lines:
+                    lines[-1] += comment_str
+                else:
+                    for c in lcs:
+                        lines.append(f"    {c}")
+            lines.append(f"    {elem_str}{comma}")
+        return "[\n" + "\n".join(lines) + "\n]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1803,25 +1892,31 @@ class ModularModifierDisable(ModuleInstantiation):
 @dataclass
 class ModuleDeclaration(ASTNode):
     """Represents an OpenSCAD module declaration (definition).
-    
+
     Module declarations define reusable 3D objects or operations. Modules
     can have parameters and contain module instantiations in their body.
-    
+
     Examples:
         module cube(size) { ... }
         module test(x, y=2) {
             translate([x, y, 0]) cube(1);
         }
-    
+
     Attributes:
         name: The module name as an Identifier.
         parameters: List of parameter declarations.
         children: List of statements in the module body (module instantiations,
             assignments, function and module declarations) for scoping and hoisting.
+        pre_name_comments: Comments between 'module' keyword and name.
+        post_name_comments: Comments between name and '('.
+        post_params_comments: Comments between ')' and '{'.
     """
     name: Identifier
     parameters: list[ParameterDeclaration]
     children: list[ModuleInstantiation | Assignment | FunctionDeclaration | ModuleDeclaration]
+    pre_name_comments: list["CommentSpan"] = field(default_factory=list)
+    post_name_comments: list["CommentSpan"] = field(default_factory=list)
+    post_params_comments: list["CommentSpan"] = field(default_factory=list)
 
     def __str__(self):
         params = ', '.join(str(param) for param in self.parameters)
@@ -1830,11 +1925,17 @@ class ModuleDeclaration(ASTNode):
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
+        for c in self.pre_name_comments:
+            c.build_scope(parent_scope)
         self.name.build_scope(parent_scope)
+        for c in self.post_name_comments:
+            c.build_scope(parent_scope)
         mod_scope = parent_scope.child_scope()
         for param in self.parameters:
             mod_scope.define_variable(param.name.name, param)
             param.build_scope(mod_scope)
+        for c in self.post_params_comments:
+            c.build_scope(mod_scope)
         _collect_hoisted_declarations(self.children, mod_scope)
         for child in self.children:
             child.build_scope(mod_scope)
@@ -1843,23 +1944,29 @@ class ModuleDeclaration(ASTNode):
 @dataclass
 class FunctionDeclaration(ASTNode):
     """Represents an OpenSCAD function declaration (definition).
-    
+
     Function declarations define reusable expressions. Functions must return
     a single expression value and cannot have side effects.
-    
+
     Examples:
         function add(x, y) = x + y;
         function square(x) = x * x;
         function test(x, y=2) = x + y;
-    
+
     Attributes:
         name: The function name as an Identifier.
         parameters: List of parameter declarations.
         expr: The expression body that the function evaluates to.
+        pre_name_comments: Comments between 'function' keyword and name.
+        post_name_comments: Comments between name and '('.
+        post_params_comments: Comments between ')' and '='.
     """
     name: Identifier
     parameters: list[ParameterDeclaration]
     expr: Expression
+    pre_name_comments: list["CommentSpan"] = field(default_factory=list)
+    post_name_comments: list["CommentSpan"] = field(default_factory=list)
+    post_params_comments: list["CommentSpan"] = field(default_factory=list)
 
     def __str__(self):
         params = ', '.join(str(param) for param in self.parameters)
@@ -1867,11 +1974,17 @@ class FunctionDeclaration(ASTNode):
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
+        for c in self.pre_name_comments:
+            c.build_scope(parent_scope)
         self.name.build_scope(parent_scope)
+        for c in self.post_name_comments:
+            c.build_scope(parent_scope)
         func_scope = parent_scope.child_scope()
         for param in self.parameters:
             func_scope.define_variable(param.name.name, param)
             param.build_scope(func_scope)
+        for c in self.post_params_comments:
+            c.build_scope(func_scope)
         self.expr.build_scope(func_scope)
 
 
@@ -1940,6 +2053,8 @@ _PREC: dict[type, int] = {
 
 
 def _prec(node) -> int:
+    if isinstance(node, CommentedExpr):
+        return _prec(node.expr)
     return _PREC.get(type(node), 99)
 
 
