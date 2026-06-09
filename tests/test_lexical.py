@@ -195,6 +195,16 @@ class TestStrings:
         code = 'x = "";'
         parse_success(parser, code)
 
+    def test_string_with_leading_spaces(self, parser):
+        """Test strings whose content begins with whitespace."""
+        code = 'x = "  foo";'
+        parse_success(parser, code)
+
+    def test_string_with_only_spaces(self, parser):
+        """Test strings containing only spaces."""
+        code = 'x = "   ";'
+        parse_success(parser, code)
+
 
 class TestNumbers:
     """Test number literal parsing."""

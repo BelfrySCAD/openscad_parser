@@ -361,6 +361,36 @@ class TestASTBuilderVisitorEdgeCases:
         result = visitor.visit_string_literal(node, [])
         assert result.val == "hello world"
 
+    def test_visit_string_literal_empty(self):
+        """Test visit_string_literal handles empty string (just two double-quotes)."""
+        parser = getOpenSCADParser()
+        visitor = ASTBuilderVisitor(parser)
+
+        class MockNode:
+            value = '""'
+            position = 0
+            def __iter__(self):
+                return iter([])
+
+        node = MockNode()
+        result = visitor.visit_string_literal(node, [])
+        assert result.val == ""
+
+    def test_visit_string_literal_leading_spaces(self):
+        """Test visit_string_literal preserves leading spaces inside the quotes."""
+        parser = getOpenSCADParser()
+        visitor = ASTBuilderVisitor(parser)
+
+        class MockNode:
+            value = '"  foo"'
+            position = 0
+            def __iter__(self):
+                return iter([])
+
+        node = MockNode()
+        result = visitor.visit_string_literal(node, [])
+        assert result.val == "  foo"
+
     def test_visit_prec_unary_with_node_children(self):
         """Test visit_prec_unary using operator nodes from iterable node."""
         parser = getOpenSCADParser()
