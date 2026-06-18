@@ -117,13 +117,15 @@ class TestLiteralASTNodes:
 
     def test_range_literal_with_step_ast(self, parser):
         """Test RangeLiteral with explicit step."""
-        code = "x = [1:10:2];"
+        code = "x = [1:2:10];"
         ast = parse_ast(parser, code)
         assignment = ast[0] if isinstance(ast, list) else ast
         assert isinstance(assignment, Assignment)
         assert isinstance(assignment.expr, RangeLiteral)
         assert isinstance(assignment.expr.step, NumberLiteral)
         assert assignment.expr.step.val == 2.0
+        assert isinstance(assignment.expr.end, NumberLiteral)
+        assert assignment.expr.end.val == 10.0
 
 
 class TestCommentASTNodes:

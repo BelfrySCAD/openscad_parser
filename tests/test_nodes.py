@@ -173,7 +173,7 @@ def test_primary_and_range_str():
     assert str(member) == "obj.x"
 
     range_lit = RangeLiteral(start=_num(0.0), end=_num(5.0), step=_num(1.0), position=_pos())
-    assert str(range_lit) == "[0 : 5 : 1]"
+    assert str(range_lit) == "[0 : 1 : 5]"
 
 
 def test_list_comprehension_str():

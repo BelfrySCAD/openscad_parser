@@ -380,8 +380,8 @@ class RangeLiteral(Primary):
     
     Examples:
         [0:10]      // Range from 0 to 10 with step 1
-        [0:10:2]    // Range from 0 to 10 with step 2
-        [10:0:-1]   // Range from 10 to 0 with step -1
+        [0:2:10]    // Range from 0 to 10 with step 2
+        [10:-1:0]   // Range from 10 to 0 with step -1
     
     Attributes:
         start: The starting value of the range.
@@ -393,7 +393,7 @@ class RangeLiteral(Primary):
     step: Expression
 
     def __str__(self):
-        return f"[{self.start} : {self.end} : {self.step}]"
+        return f"[{self.start} : {self.step} : {self.end}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope

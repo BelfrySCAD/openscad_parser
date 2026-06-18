@@ -986,10 +986,14 @@ class ASTBuilderVisitor(PTNodeVisitor):
         return children[0]
     
     def visit_range_expr(self, node, children):
+        # OpenSCAD syntax: [start:end] or [start:step:end]
         start = children[0]
-        end = children[1]
-        # Step is optional - if present, use it; otherwise default to 1.0
-        step = children[2] if len(children) > 2 else NumberLiteral(val=1.0, position=self._get_node_position(node))
+        if len(children) > 2:
+            step = children[1]
+            end = children[2]
+        else:
+            end = children[1]
+            step = NumberLiteral(val=1.0, position=self._get_node_position(node))
         return RangeLiteral(start=start, end=end, step=step, position=self._get_node_position(node))
     
     def visit_vector_expr(self, node, children):
