@@ -172,11 +172,15 @@ class SourceMap:
                     # Calculate the actual line/column for the after segment
                     # Count lines in the part that was removed + before
                     removed_and_before = segment.content[:replace_end_in_segment]
-                    line_count = removed_and_before.count('\n') - line_count_adjustment
+                    line_count = removed_and_before.count('\n') + line_count_adjustment
                     if line_count > 0:
-                        last_newline = removed_and_before.rfind('\n')
-                        after_segment.start_line = segment.start_line + line_count
-                        after_segment.start_column = len(removed_and_before) - last_newline
+                        if line_count_adjustment and removed_and_before.count('\n') == 0:
+                            after_segment.start_line = segment.start_line + line_count
+                            after_segment.start_column = 1
+                        else:
+                            last_newline = removed_and_before.rfind('\n')
+                            after_segment.start_line = segment.start_line + line_count
+                            after_segment.start_column = len(removed_and_before) - last_newline
                     else:
                         after_segment.start_line = segment.start_line
                         after_segment.start_column = segment.start_column + len(removed_and_before)
