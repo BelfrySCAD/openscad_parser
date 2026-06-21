@@ -80,7 +80,12 @@ class SemanticChildren(list):
         self._rule_map = rule_map
 
     def __getattr__(self, name):
+        if name == '_rule_map':
+            raise AttributeError(name)
         return self._rule_map.get(name, [])
+
+    def __reduce__(self):
+        return (list, (list(self),))
 
     def get_rule(self, rule_name, index=0):
         """Return the index-th result for rule_name, or [] if absent/out of range."""
@@ -95,7 +100,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
     
     def __init__(self, parser, source_map=None, file=""):
         """Initialize the visitor with the parser and optional source map or file path.
-        
+
         Args:
             parser: The Arpeggio parser instance (needed to access input for position conversion)
             source_map: Optional SourceMap for tracking positions across multiple origins
@@ -105,10 +110,12 @@ class ASTBuilderVisitor(PTNodeVisitor):
         self.parser = parser
         if source_map is not None:
             self.source_map = source_map
+            self._has_source_map = bool(source_map._segments)
             self.file = ""  # Not used when source_map is provided
         else:
             # Backward compatibility: create a simple source map from file
             self.source_map = SourceMap()
+            self._has_source_map = False
             if file:
                 # We can't get the content here, but we'll handle it in _get_node_position
                 self.file = file
@@ -194,17 +201,9 @@ class ASTBuilderVisitor(PTNodeVisitor):
         """Return the combined-string offset one past the last character of node."""
         if node is None:
             return 0
-        try:
-            # NonTerminal: recurse to find the furthest end among children
-            end = getattr(node, 'position', 0)
-            for child in node:
-                child_end = self._get_node_end_position(child)
-                if child_end > end:
-                    end = child_end
+        end = getattr(node, 'position_end', None)
+        if end is not None:
             return end
-        except TypeError:
-            pass
-        # Terminal: start + length of matched value
         pos = getattr(node, 'position', 0)
         val = getattr(node, 'value', '')
         return pos + len(str(val))
@@ -225,7 +224,7 @@ class ASTBuilderVisitor(PTNodeVisitor):
         end_pos = self._get_node_end_position(node)
 
         # Use SourceMap if available to map position back to original origin
-        if hasattr(self, 'source_map') and self.source_map.get_segments():
+        if self._has_source_map:
             return self.source_map.get_location(char_pos, end_pos)
         else:
             # Fallback: calculate line/column from character position

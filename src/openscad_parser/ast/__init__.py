@@ -1,4 +1,6 @@
+import hashlib
 import os
+import pickle
 import platform
 from typing import Optional
 from arpeggio import NoMatch
@@ -253,22 +255,174 @@ def getASTfromString(code: str, include_comments: bool = False, origin: str = "<
     return ast
 
 
-# Module-level cache for AST trees
+# Module-level in-memory cache for per-file AST trees (no includes resolved)
+# Key: tuple of (absolute file path (str), include_comments (bool))
+# Value: tuple of (AST nodes, modification timestamp)
+_ast_cache: dict[tuple[str, bool], tuple[list[ASTNode] | None, float]] = {}
+
+# Resolved (includes-expanded) cache
 # Key: tuple of (absolute file path (str), include_comments (bool), process_includes (bool))
 # Value: tuple of (AST nodes, modification timestamp)
-_ast_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {}
+_resolved_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {}
+
+
+def _get_disk_cache_dir() -> Optional[str]:
+    """Get the disk cache directory, creating it if needed."""
+    cache_dir = os.environ.get('OPENSCAD_PARSER_CACHE_DIR')
+    if not cache_dir:
+        home = os.path.expanduser('~')
+        if platform.system() == 'Darwin':
+            cache_dir = os.path.join(home, 'Library', 'Caches', 'openscad_parser')
+        elif platform.system() == 'Windows':  # pragma: no cover
+            cache_dir = os.path.join(os.environ.get('LOCALAPPDATA', home), 'openscad_parser', 'cache')
+        else:
+            cache_dir = os.path.join(home, '.cache', 'openscad_parser')
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        return cache_dir
+    except OSError:  # pragma: no cover
+        return None
+
+
+def _disk_cache_path(file_path: str, include_comments: bool) -> Optional[str]:
+    """Get the disk cache file path for a given source file."""
+    cache_dir = _get_disk_cache_dir()
+    if not cache_dir:
+        return None  # pragma: no cover
+    key = f"{file_path}:{include_comments}"
+    h = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return os.path.join(cache_dir, f"{h}.pickle")
+
+
+def _load_from_disk_cache(file_path: str, include_comments: bool, current_mtime: float) -> Optional[list[ASTNode]]:
+    """Try to load a file's AST from disk cache."""
+    cache_path = _disk_cache_path(file_path, include_comments)
+    if not cache_path or not os.path.exists(cache_path):
+        return None
+    try:
+        with open(cache_path, 'rb') as f:
+            cached_mtime, ast = pickle.load(f)
+        if cached_mtime == current_mtime:
+            return ast
+    except (OSError, pickle.UnpicklingError, ValueError, EOFError):
+        pass
+    return None
+
+
+def _save_to_disk_cache(file_path: str, include_comments: bool, mtime: float, ast: list[ASTNode] | None):
+    """Save a file's AST to disk cache."""
+    cache_path = _disk_cache_path(file_path, include_comments)
+    if not cache_path:
+        return  # pragma: no cover
+    try:
+        with open(cache_path, 'wb') as f:
+            pickle.dump((mtime, ast), f, protocol=pickle.HIGHEST_PROTOCOL)
+    except OSError:  # pragma: no cover
+        pass
 
 
 def clear_ast_cache():
     """Clear the in-memory AST cache.
-    
+
     This function removes all cached AST trees, forcing all subsequent
     calls to getASTfromFile() to re-parse files.
-    
+
     Example:
         clear_ast_cache()  # Clear all cached ASTs
     """
     _ast_cache.clear()
+    _resolved_cache.clear()
+
+
+def clear_disk_cache():
+    """Clear the on-disk AST cache.
+
+    This function removes all cached AST files from disk, forcing all subsequent
+    calls to re-parse files from scratch.
+
+    Example:
+        clear_disk_cache()  # Remove all disk-cached ASTs
+    """
+    cache_dir = _get_disk_cache_dir()
+    if cache_dir and os.path.isdir(cache_dir):
+        for fname in os.listdir(cache_dir):
+            if fname.endswith('.pickle'):
+                try:
+                    os.remove(os.path.join(cache_dir, fname))
+                except OSError:  # pragma: no cover
+                    pass
+
+
+def _parse_single_file(file_path: str, include_comments: bool = False) -> list[ASTNode] | None:
+    """Parse a single file without resolving includes. Uses memory and disk cache.
+
+    Returns the AST with IncludeStatement nodes intact (not expanded).
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {file_path} not found")
+
+    current_mtime = os.path.getmtime(file_path)
+    cache_key = (file_path, include_comments)
+
+    # Check in-memory cache
+    if cache_key in _ast_cache:
+        cached_ast, cached_mtime = _ast_cache[cache_key]
+        if cached_mtime == current_mtime:
+            return cached_ast
+
+    # Check disk cache
+    disk_result = _load_from_disk_cache(file_path, include_comments, current_mtime)
+    if disk_result is not None:
+        _ast_cache[cache_key] = (disk_result, current_mtime)
+        return disk_result
+
+    # Parse the file
+    with open(file_path, 'r', encoding='utf-8') as f:
+        code = f.read()
+
+    source_map = SourceMap()
+    source_map.add_origin(file_path, code)
+
+    parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
+    ast = parse_ast(parser, code, source_map=source_map)
+
+    # Cache in memory and on disk
+    _ast_cache[cache_key] = (ast, current_mtime)
+    _save_to_disk_cache(file_path, include_comments, current_mtime, ast)
+
+    return ast
+
+
+def _resolve_includes(ast_nodes: list[ASTNode] | None, current_file: str,
+                      include_comments: bool = False,
+                      visited: set | None = None) -> list[ASTNode] | None:
+    """Resolve IncludeStatement nodes by parsing and inlining referenced files."""
+    if ast_nodes is None:
+        return None
+    if visited is None:
+        visited = set()
+
+    result = []
+    for node in ast_nodes:
+        if isinstance(node, IncludeStatement):
+            filename = node.filepath.val
+            lib_file = findLibraryFile(current_file, filename)
+            if lib_file is None:
+                raise FileNotFoundError(
+                    f"Included file '{filename}' not found. "
+                    f"Searched relative to: {current_file if current_file else 'current directory'}"
+                )
+            lib_file = os.path.abspath(lib_file)
+            if lib_file in visited:
+                continue
+            visited.add(lib_file)
+            included_ast = _parse_single_file(lib_file, include_comments)
+            included_ast = _resolve_includes(included_ast, lib_file, include_comments, visited)
+            if included_ast:
+                result.extend(included_ast)
+        else:
+            result.append(node)
+    return result
 
 
 def getASTfromFile(file: str, include_comments: bool = False, process_includes: bool = True) -> list[ASTNode] | None:
@@ -278,20 +432,21 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
     This function reads the contents of the provided OpenSCAD file, processes include statements,
     parses it using the OpenSCAD parser, and returns the resulting AST (or list of AST nodes).
 
-    The function caches AST trees in memory. Cache entries are automatically invalidated
-    if the file's modification timestamp changes, ensuring that updated files are re-parsed.
+    The function caches AST trees both in memory and on disk. Cache entries are automatically
+    invalidated if a file's modification timestamp changes, ensuring updated files are re-parsed.
+    Each included file is parsed independently and cached separately, so only changed files
+    need re-parsing.
 
     Important: The `process_includes` parameter affects the AST structure:
-    
-    - When `process_includes=True` (default): Include statements are processed before parsing,
-      meaning the included file contents are inserted into the source code, and the AST will
-      NOT contain `IncludeStatement` nodes. The AST represents the code as if all includes
-      have been expanded.
-    
+
+    - When `process_includes=True` (default): Include statements are processed and resolved,
+      meaning the included file's AST nodes are inlined, and the AST will NOT contain
+      `IncludeStatement` nodes. The AST represents the code as if all includes have been expanded.
+
     - When `process_includes=False`: Include statements are NOT processed, and the AST will
       contain `IncludeStatement` nodes wherever `include <file>` statements appear in the
       source code.
-    
+
     Note: Unlike `include` statements, `use <file>` statements are ALWAYS parsed into
     `UseStatement` AST nodes, regardless of the `process_includes` setting. This is because
     `use` statements only affect module and function lookup at runtime, not source inclusion.
@@ -316,54 +471,34 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
         # Get AST with IncludeStatement nodes instead of processing includes
         ast_with_include_nodes = getASTfromFile("my_model.scad", process_includes=False)
     """
-    # Get absolute path for consistent cache keys
     file_path = os.path.abspath(file)
-    
-    # Check if file exists and get its modification time
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File {file} not found")
-    
+
     current_mtime = os.path.getmtime(file_path)
-    
-    # Cache key includes file path, include_comments flag, and process_includes flag
-    cache_key = (file_path, include_comments, process_includes)
-    
-    # Check cache
-    if cache_key in _ast_cache:
-        cached_ast, cached_mtime = _ast_cache[cache_key]
-        # If file hasn't been modified, return cached AST
+
+    # For process_includes=False, just parse the single file
+    if not process_includes:
+        return _parse_single_file(file_path, include_comments)
+
+    # Check resolved cache (in-memory only since resolved ASTs depend on multiple files)
+    resolved_key = (file_path, include_comments, True)
+    if resolved_key in _resolved_cache:
+        cached_ast, cached_mtime = _resolved_cache[resolved_key]
         if cached_mtime == current_mtime:
             return cached_ast
-        # Otherwise, invalidate the cache entry
-        del _ast_cache[cache_key]
-    
-    # Read the file
-    with open(file_path, 'r', encoding='utf-8') as f:
-        code = f.read()
-    
-    # Create source map and process includes if requested
-    source_map = SourceMap()
-    source_map.add_origin(file_path, code)
-    
-    if process_includes:
-        try:
-            source_map = process_includes_func(source_map, file_path)
-        except FileNotFoundError as e:
-            # Re-raise file not found errors as-is
-            raise
-        except Exception as e:  # pragma: no cover
-            raise Exception(f"Error processing includes: {e}")
-    
-    # Get the combined string for parsing
-    combined_code = source_map.get_combined_string()
-    
-    # Parse
-    parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
-    ast = parse_ast(parser, combined_code, source_map=source_map)
-    
-    # Cache the result with current modification time
-    _ast_cache[cache_key] = (ast, current_mtime)
-    
+
+    # Parse the file independently (uses per-file cache)
+    ast = _parse_single_file(file_path, include_comments)
+
+    # Resolve all include statements recursively
+    visited = {file_path}
+    ast = _resolve_includes(ast, file_path, include_comments, visited)
+
+    # Cache the resolved result
+    _resolved_cache[resolved_key] = (ast, current_mtime)
+
     return ast
 
 
