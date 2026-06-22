@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import pickle
 import platform
@@ -310,7 +311,7 @@ def _load_from_disk_cache(file_path: str, include_comments: bool, current_mtime:
 
 
 def _save_to_disk_cache(file_path: str, include_comments: bool, mtime: float, ast: list[ASTNode] | None):
-    """Save a file's AST to disk cache."""
+    """Save a file's AST to disk cache and update the manifest."""
     cache_path = _disk_cache_path(file_path, include_comments)
     if not cache_path:
         return  # pragma: no cover
@@ -318,7 +319,73 @@ def _save_to_disk_cache(file_path: str, include_comments: bool, mtime: float, as
         with open(cache_path, 'wb') as f:
             pickle.dump((mtime, ast), f, protocol=pickle.HIGHEST_PROTOCOL)
     except OSError:  # pragma: no cover
+        return
+    cache_fname = os.path.basename(cache_path)
+    _manifest_update(cache_fname, file_path)
+    _evict_stale_cache()
+
+
+def _manifest_path() -> Optional[str]:
+    """Get the path to the cache manifest file."""
+    cache_dir = _get_disk_cache_dir()
+    if not cache_dir:
+        return None  # pragma: no cover
+    return os.path.join(cache_dir, "manifest.json")
+
+
+def _manifest_load() -> dict[str, str]:
+    """Load the manifest: {cache_filename: source_file_path}."""
+    path = _manifest_path()
+    if not path or not os.path.exists(path):
+        return {}
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _manifest_save(manifest: dict[str, str]):
+    """Save the manifest to disk."""
+    path = _manifest_path()
+    if not path:
+        return  # pragma: no cover
+    try:
+        with open(path, 'w') as f:
+            json.dump(manifest, f)
+    except OSError:  # pragma: no cover
         pass
+
+
+def _manifest_update(cache_fname: str, source_path: str):
+    """Add or update an entry in the manifest."""
+    manifest = _manifest_load()
+    manifest[cache_fname] = source_path
+    _manifest_save(manifest)
+
+
+def _evict_stale_cache():
+    """Remove cache entries whose source files no longer exist."""
+    cache_dir = _get_disk_cache_dir()
+    if not cache_dir:
+        return  # pragma: no cover
+    manifest = _manifest_load()
+    if not manifest:
+        return
+    stale_keys = [
+        fname for fname, source_path in manifest.items()
+        if not os.path.exists(source_path)
+    ]
+    if not stale_keys:
+        return
+    for fname in stale_keys:
+        cache_file = os.path.join(cache_dir, fname)
+        try:
+            os.remove(cache_file)
+        except OSError:
+            pass
+        del manifest[fname]
+    _manifest_save(manifest)
 
 
 def clear_ast_cache():
@@ -346,7 +413,7 @@ def clear_disk_cache():
     cache_dir = _get_disk_cache_dir()
     if cache_dir and os.path.isdir(cache_dir):
         for fname in os.listdir(cache_dir):
-            if fname.endswith('.pickle'):
+            if fname.endswith('.pickle') or fname == 'manifest.json':
                 try:
                     os.remove(os.path.join(cache_dir, fname))
                 except OSError:  # pragma: no cover
