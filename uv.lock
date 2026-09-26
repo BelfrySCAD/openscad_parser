@@ -283,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "openscad-parser"
-version = "2.6.1"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "arpeggio" },
