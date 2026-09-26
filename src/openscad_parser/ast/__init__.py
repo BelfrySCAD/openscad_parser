@@ -105,55 +105,80 @@ from .serialization import (
 
 # --- AST convenience functions ---
 
+def _windows_documents_dir() -> str:
+    """Where Windows says My Documents is -- the same SHGetFolderPathW(
+    CSIDL_PERSONAL, SHGFP_TYPE_CURRENT) call OpenSCAD makes -- rather than
+    assuming ~/Documents: OneDrive's Known Folder Move, on by default, puts
+    it at ~/OneDrive/Documents instead."""
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:  # CSIDL_PERSONAL, SHGFP_TYPE_CURRENT
+            return buf.value
+    except (AttributeError, OSError):  # not actually on Windows
+        pass
+    return os.path.join(os.path.expanduser("~"), "Documents")
+
+
+# Libraries shipped beside this package -- OpenSCAD's resourcePath("libraries").
+_BUNDLED_LIBRARY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libraries")
+
+
+def librarySearchDirs(currfile: str) -> list[str]:
+    """The directories `include`/`use` search, in order, as OpenSCAD's
+    parser_init() builds them: the including file's own directory, then
+    every OPENSCADPATH entry, then the user's libraries folder, then
+    libraries shipped beside this package.
+
+    OPENSCADPATH adds to the libraries folder rather than replacing it --
+    it used to replace it, so setting it for one library hid every other
+    one, a BOSL2 in the default folder included (openscad_cpp_parser #10).
+    """
+    dirs = []
+    if currfile:
+        dirs.append(os.path.dirname(os.path.abspath(currfile)))
+
+    system = platform.system()
+    pathsep = ";" if system == "Windows" else ":"
+    for path in os.getenv("OPENSCADPATH", "").split(pathsep):
+        expanded_path = os.path.expandvars(path)
+        if expanded_path:
+            dirs.append(expanded_path)
+
+    if system == "Windows":
+        dirs.append(os.path.join(_windows_documents_dir(), "OpenSCAD", "libraries"))
+    elif system == "Darwin":
+        dirs.append(os.path.expanduser("~/Documents/OpenSCAD/libraries"))
+    elif system == "Linux":
+        dirs.append(os.path.expanduser("~/.local/share/OpenSCAD/libraries"))
+    # ponytail: only the folder beside the package, no ../share/openscad walk
+    dirs.append(_BUNDLED_LIBRARY_DIR)
+    return dirs
+
+
 def findLibraryFile(currfile: str, libfile: str) -> Optional[str]:
-    """Find a library file using OpenSCAD's search path rules.
-    
-    Searches for the library file in the following order:
-    1. Directory of the current file (if currfile is provided)
-    2. Directories specified in OPENSCADPATH environment variable
-    3. Platform-specific default library directories
-    
+    """Find a library file using OpenSCAD's search path rules: the first
+    directory in librarySearchDirs(currfile) that holds it.
+
     Args:
         currfile: Full path to the current OpenSCAD file (can be empty string)
         libfile: Partial or full path to the library file to find
-        
+
     Returns:
         Full path to the found library file, or None if not found
     """
-    dirs = []
-    
-    # Add directory of current file if provided
-    if currfile:
-        dirs.append(os.path.dirname(os.path.abspath(currfile)))
-    
-    # Determine path separator and default path based on platform
-    pathsep = ":"
-    dflt_path = ""
-    system = platform.system()
-    
-    if system == "Windows":  # pragma: no cover
-        dflt_path = os.path.join(os.path.expanduser("~"), "Documents", "OpenSCAD", "libraries")
-        pathsep = ";"
-    elif system == "Darwin":  # pragma: no cover
-        dflt_path = os.path.expanduser("~/Documents/OpenSCAD/libraries")
-    elif system == "Linux":  # pragma: no cover
-        dflt_path = os.path.expanduser("~/.local/share/OpenSCAD/libraries")
-    
-    # Get OPENSCADPATH from environment or use default
-    env = os.getenv("OPENSCADPATH", dflt_path)
-    if env:
-        for path in env.split(pathsep):
-            expanded_path = os.path.expandvars(path)
-            if expanded_path:
-                dirs.append(expanded_path)
-    
-    # Search for the file in each directory
-    for d in dirs:
+    for d in librarySearchDirs(currfile):
         test_file = os.path.join(d, libfile)
         if os.path.isfile(test_file):
             return test_file
-    
     return None
+
+
+def _not_found(what: str, filename: str, currfile: str) -> str:
+    """A not-found message that lists every directory searched. Naming only
+    the includer read as "only there was searched"."""
+    return f"{what} '{filename}' not found. Searched:" + "".join(
+        f"\n  {d}" for d in librarySearchDirs(currfile))
 
 
 # Alias for backward compatibility (test_ast_convenience.py imports _find_library_file)
@@ -475,10 +500,7 @@ def _resolve_includes(ast_nodes: list[ASTNode] | None, current_file: str,
             filename = node.filepath.val
             lib_file = findLibraryFile(current_file, filename)
             if lib_file is None:
-                raise FileNotFoundError(
-                    f"Included file '{filename}' not found. "
-                    f"Searched relative to: {current_file if current_file else 'current directory'}"
-                )
+                raise FileNotFoundError(_not_found("Included file", filename, current_file))
             lib_file = os.path.abspath(lib_file)
             if lib_file in visited:
                 continue
@@ -574,13 +596,9 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
     Find and parse an OpenSCAD library file using OpenSCAD's search path rules,
     and return both the AST and absolute path to the file.
 
-    This function searches for the library file in the following order:
-    1. Directory of the current file (if currfile is provided)
-    2. Directories specified in OPENSCADPATH environment variable
-    3. Platform-specific default library directories:
-       - Windows: ~/Documents/OpenSCAD/libraries
-       - macOS: ~/Documents/OpenSCAD/libraries
-       - Linux: ~/.local/share/OpenSCAD/libraries
+    This function searches the directories librarySearchDirs(currfile)
+    returns, in order: the current file's directory, OPENSCADPATH, the
+    platform's libraries folder, then libraries beside this package.
 
     Once found, the file is parsed using getASTfromFile(), which includes
     caching support and include processing.
@@ -624,10 +642,7 @@ def getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = 
     found_file = findLibraryFile(currfile, libfile)
 
     if found_file is None:
-        raise FileNotFoundError(
-            f"Library file '{libfile}' not found in search paths. "
-            f"Searched in: current file directory, OPENSCADPATH, and platform default paths."
-        )
+        raise FileNotFoundError(_not_found("Library file", libfile, currfile))
 
     # Use getASTfromFile() which includes caching and include processing
     ast = getASTfromFile(found_file, include_comments=include_comments, process_includes=process_includes)
