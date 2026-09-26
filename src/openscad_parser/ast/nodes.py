@@ -387,12 +387,23 @@ class RangeLiteral(Primary):
         start: The starting value of the range.
         end: The ending value of the range.
         step: The step size between values.
+        implicit_step: True when the source wrote the two-argument form
+            `[a:b]` and `step` is the 1 this parser synthesized for it. The
+            value is the same either way; the flag exists because "the author
+            chose no step" can't be recovered from the synthesized node, and
+            an evaluator's backwards-range warning is for exactly that case
+            (`[5:0]` is almost always `[5:-1:0]` mistyped; `[5:1:0]` is meant).
     """
     start: Expression
     end: Expression
     step: Expression
+    implicit_step: bool = False
 
     def __str__(self):
+        # Print back the form that was written: reprinting `[5:0]` as
+        # `[5 : 1 : 0]` would silence that warning.
+        if self.implicit_step:
+            return f"[{self.start} : {self.end}]"
         return f"[{self.start} : {self.step} : {self.end}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
