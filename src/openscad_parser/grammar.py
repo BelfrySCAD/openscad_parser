@@ -39,9 +39,13 @@ def strict_commas(enabled: bool = True):
         _STRICT_COMMAS.reset(token)
 
 
-def _trailing_comma():
-    """What may follow the last item of an argument or assignment list."""
-    return () if _STRICT_COMMAS.get() else (Optional(TOK_COMMA),)
+def _comma_list(item, trailing: bool = True):
+    """`item`s separated by commas, possibly none, with one trailing comma
+    after at least one of them when `trailing` -- as OpenSCAD reads every
+    list: `f()`, `f(1)` and `f(1,)` parse, `f(,)` and `f(1,,)` do not."""
+    if not trailing:
+        return ZeroOrMore(item, sep=TOK_COMMA)
+    return Optional(OneOrMore(item, sep=TOK_COMMA), Optional(TOK_COMMA))
 
 
 # --- OpenSCAD language parsing root ---
@@ -486,7 +490,7 @@ def parameter_block():
 
 
 def parameters():
-    return (ZeroOrMore(parameter, sep=TOK_COMMA), ZeroOrMore(TOK_COMMA))
+    return (_comma_list(parameter),)
 
 
 def parameter():
@@ -511,7 +515,7 @@ def argument_block():
 
 
 def arguments():
-    return (ZeroOrMore(argument, sep=TOK_COMMA), *_trailing_comma())
+    return (_comma_list(argument, not _STRICT_COMMAS.get()),)
 
 
 def argument():
@@ -532,7 +536,7 @@ def named_argument():
 # --- Expressions ---
 
 def assignments_expr():
-    return (ZeroOrMore(assignment_expr, sep=TOK_COMMA), *_trailing_comma())
+    return (_comma_list(assignment_expr, not _STRICT_COMMAS.get()),)
 
 
 def assignment_expr():
@@ -700,13 +704,13 @@ def range_expr():
 
 
 def vector_expr():
-    return (TOK_BRACKET, vector_elements, Optional(TOK_COMMA), TOK_ENDBRACKET)
+    return (TOK_BRACKET, vector_elements, TOK_ENDBRACKET)
 
 
 # --- Vector and list comprehension ---
 
 def vector_elements():
-    return ZeroOrMore(vector_element, sep=TOK_COMMA)
+    return (_comma_list(vector_element),)
 
 
 def vector_element():
