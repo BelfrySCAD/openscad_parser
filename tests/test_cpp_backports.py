@@ -60,3 +60,28 @@ class TestLibrarySearch:
             getASTfromLibraryFile(str(main), "nope.scad")
         assert str(e.value) == ("Library file 'nope.scad' not found. Searched:\n"
                                 f"  {home}\n  {home / 'Documents' / 'OpenSCAD' / 'libraries'}\n  {BUNDLED}")
+
+
+class TestRangeStepWritten:
+    """ade1d62: a range records whether its step was written."""
+
+    def _range(self, src):
+        from openscad_parser.ast import getASTfromString
+        return getASTfromString(f"x = {src};")[0].expr
+
+    def test_flag_and_printing(self):
+        two, three = self._range("[5:0]"), self._range("[5:1:0]")
+        assert two.implicit_step and not three.implicit_step
+        assert str(two) == "[5 : 0]" and str(three) == "[5 : 1 : 0]"
+        assert two.step.val == 1  # the value is the same either way
+
+    def test_survives_serialization(self):
+        from openscad_parser.ast import ast_from_json, ast_to_json, getASTfromString
+        ast = ast_from_json(ast_to_json(getASTfromString("x = [5:0]; y = [5:1:0];")))
+        assert ast[0].expr.implicit_step and not ast[1].expr.implicit_step
+
+    def test_pretty_print_keeps_the_written_form(self):
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.pretty_print import to_openscad
+        assert to_openscad(getASTfromString("for (i = [5:0]) cube(i);")).startswith("for (i = [5 : 0])")
+        assert to_openscad(getASTfromString("for (i = [5:1:0]) cube(i);")).startswith("for (i = [5 : 1 : 0])")

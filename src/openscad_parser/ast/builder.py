@@ -993,7 +993,8 @@ class ASTBuilderVisitor(PTNodeVisitor):
         else:
             end = children[1]
             step = NumberLiteral(val=1.0, position=self._get_node_position(node))
-        return RangeLiteral(start=start, end=end, step=step, position=self._get_node_position(node))
+        return RangeLiteral(start=start, end=end, step=step, implicit_step=len(children) <= 2,
+                            position=self._get_node_position(node))
     
     def visit_vector_expr(self, node, children):
         elements = children if children else []
