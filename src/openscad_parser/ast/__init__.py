@@ -54,6 +54,7 @@ from .nodes import (
     LessThanOrEqualOp,
     FunctionLiteral,
     PrimaryCall,
+    RenderExpression,
     PrimaryIndex,
     PrimaryMember,
     VectorElement,

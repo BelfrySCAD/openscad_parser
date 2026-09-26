@@ -1554,11 +1554,50 @@ class ModularCall(ModuleInstantiation):
     children: list[ModuleInstantiation]
 
     def __str__(self):
-        return f"{self.name}({', '.join(str(arg) for arg in self.arguments)})"
+        # With its children: a child dropped here is geometry lost wherever
+        # str() is the printer, as it is inside a render() expression.
+        args = ', '.join(str(arg) for arg in self.arguments)
+        children = [c for c in self.children if not isinstance(c, (CommentLine, CommentSpan))]
+        if not children:
+            return f"{self.name}({args})"
+        if len(children) == 1:
+            return f"{self.name}({args}) {children[0]}"
+        return f"{self.name}({args}) {{ {' '.join(f'{c};' for c in children)} }}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
         self.name.build_scope(parent_scope)
+        for arg in self.arguments:
+            arg.build_scope(parent_scope)
+        if self.children:
+            children_scope = parent_scope.child_scope()
+            _collect_hoisted_declarations(self.children, children_scope)
+            for child in self.children:
+                child.build_scope(children_scope)
+
+
+@dataclass
+class RenderExpression(Expression):
+    """`render(args) { ... }` in expression position, e.g.
+    `obj = render() { cube(1); };`: its children's geometry as a value.
+
+    Attributes:
+        arguments: The render() arguments.
+        children: The child module instantiations it measures.
+    """
+    arguments: list[Argument]
+    children: list[ModuleInstantiation]
+
+    def __str__(self):
+        # Always braced, with a `;` after every child: unlike a statement's,
+        # nothing downstream adds them, and `render() cube(1)` unbraced is the
+        # one form that doesn't re-parse.
+        args = ', '.join(str(arg) for arg in self.arguments)
+        body = ' '.join(f"{child};" for child in self.children if not isinstance(child, CommentLine))
+        return f"render({args}) {{ {body} }}" if body else f"render({args}) {{}}"
+
+    def build_scope(self, parent_scope: "Scope") -> None:
+        self.scope = parent_scope
         for arg in self.arguments:
             arg.build_scope(parent_scope)
         if self.children:

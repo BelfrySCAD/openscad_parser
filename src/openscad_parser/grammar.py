@@ -263,6 +263,10 @@ def KWD_ECHO():
     return Kwd('echo')
 
 
+def KWD_RENDER():
+    return Kwd('render')
+
+
 def KWD_EACH():
     return Kwd('each')
 
@@ -629,6 +633,7 @@ def string_literal():
 
 def primary():
     return [
+            render_expr,
             paren_expr,
             range_expr,
             vector_expr,
@@ -640,6 +645,16 @@ def primary():
             TOK_NUMBER,
             variable_or_function_name
         ]
+
+
+def render_expr():
+    # `obj = render() { cube(1); };` -- geometry measured as a value
+    # (openscad_cpp_parser #5). Braces required: that is what tells it from
+    # a call to a function named render, and an unbraced child would swallow
+    # the assignment's `;`. Ordered choice falls through to an ordinary call
+    # or name when no block follows, so unlike the LALR parsers this one
+    # does not need to reserve `render`.
+    return (KWD_RENDER, TOK_PAREN, arguments, TOK_ENDPAREN, statement_block)
 
 
 def paren_expr():

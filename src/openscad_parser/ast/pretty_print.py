@@ -22,6 +22,7 @@ from .nodes import (
     UndefinedLiteral,
     CommentedExpr,
     PrimaryCall,
+    RenderExpression,
     RangeLiteral,
     ListComprehension,
     VectorElement,
@@ -385,6 +386,10 @@ def _fmt_expr(expr, indent: int, w: int) -> str:
         if pending:
             out += "  " + "  ".join(str(c) for c in pending) + "\n" + " " * indent
         return out + "]"
+    if isinstance(expr, RenderExpression):
+        # Always braced: `x = render() cube(1);` does not parse. _fmt_block's
+        # statements bring their own terminators.
+        return f"render({_join_str(expr.arguments)}) {_fmt_block(expr.children, indent, w)}"
     if isinstance(expr, PrimaryCall):
         inline = str(expr)
         if len(inline) + indent > _MULTILINE_CHAR_LIMIT or _has_line_comment(expr.arguments):
