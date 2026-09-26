@@ -4,10 +4,44 @@
 
 from __future__ import unicode_literals
 
+import contextlib
+import contextvars
+
 from arpeggio import (
     Optional, ZeroOrMore, OneOrMore, EOF, Kwd, Not,  # And,
     RegExMatch as _
 )
+
+
+# Strict-commas mode: reject the trailing commas OpenSCAD 2021.01 rejected --
+# in a call's arguments and a let/for/intersection_for assignment list --
+# while keeping the ones it accepted: list literals, list comprehensions and
+# parameter declarations (measured against 2021.01; openscad_cpp_parser #9).
+# Today's OpenSCAD accepts all of them, so this is off by default. A context
+# variable, as the C++ parser's StrictCommaScope is thread-local: it nests
+# and restores on exit, including when a parse raises. Read when a parser is
+# built, so getOpenSCADParser() builds the grammar for the current mode, and
+# every AST cache keys on it.
+_STRICT_COMMAS: contextvars.ContextVar[bool] = contextvars.ContextVar("strict_commas", default=False)
+
+
+@contextlib.contextmanager
+def strict_commas(enabled: bool = True):
+    """Parse as OpenSCAD 2021.01 did, rejecting `cube(1,)` and `let(x=1,)`::
+
+        with strict_commas():
+            ast = getASTfromFile("model.scad")
+    """
+    token = _STRICT_COMMAS.set(enabled)
+    try:
+        yield
+    finally:
+        _STRICT_COMMAS.reset(token)
+
+
+def _trailing_comma():
+    """What may follow the last item of an argument or assignment list."""
+    return () if _STRICT_COMMAS.get() else (Optional(TOK_COMMA),)
 
 
 # --- OpenSCAD language parsing root ---
@@ -477,7 +511,7 @@ def argument_block():
 
 
 def arguments():
-    return (ZeroOrMore(argument, sep=TOK_COMMA), Optional(TOK_COMMA))
+    return (ZeroOrMore(argument, sep=TOK_COMMA), *_trailing_comma())
 
 
 def argument():
@@ -498,7 +532,7 @@ def named_argument():
 # --- Expressions ---
 
 def assignments_expr():
-    return (ZeroOrMore(assignment_expr, sep=TOK_COMMA), Optional(TOK_COMMA))
+    return (ZeroOrMore(assignment_expr, sep=TOK_COMMA), *_trailing_comma())
 
 
 def assignment_expr():
