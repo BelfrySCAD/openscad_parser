@@ -976,7 +976,7 @@ class TernaryOp(Expression):
     false_expr: Expression
 
     def __str__(self):
-        return f"{self.condition} ? {self.true_expr} : {self.false_expr}"
+        return f"{_condition(self.condition)} ? {self.true_expr} : {self.false_expr}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1204,7 +1204,7 @@ class PrimaryCall(Expression):
     arguments: list[Argument]
 
     def __str__(self):
-        return f"{self.left}({', '.join(str(arg) for arg in self.arguments)})"
+        return f"{_postfix_operand(self.left)}({', '.join(str(arg) for arg in self.arguments)})"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1233,7 +1233,7 @@ class PrimaryIndex(Expression):
     index: Expression
 
     def __str__(self):
-        return f"{self.left}[{self.index}]"
+        return f"{_postfix_operand(self.left)}[{self.index}]"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -1260,7 +1260,7 @@ class PrimaryMember(Expression):
     member: Identifier
 
     def __str__(self):
-        return f"{self.left}.{self.member}"
+        return f"{_postfix_operand(self.left)}.{self.member}"
 
     def build_scope(self, parent_scope: "Scope") -> None:
         self.scope = parent_scope
@@ -2046,7 +2046,9 @@ class IncludeStatement(ASTNode):
 # ---------------------------------------------------------------------------
 
 _PREC: dict[type, int] = {
-    # loosest
+    # let/assert/echo and function literals take everything to their right,
+    # so they bind loosest of all: as an operand they always need parens.
+    LetOp: 5, AssertOp: 5, EchoOp: 5, FunctionLiteral: 5,
     TernaryOp: 10,
     LogicalOrOp: 20,
     LogicalAndOp: 30,
@@ -2081,6 +2083,19 @@ def _rp(child, parent_prec: int) -> str:
     ``a - (b - c)`` is not flattened to ``a - b - c``.
     """
     return f"({child})" if _prec(child) <= parent_prec else str(child)
+
+
+def _postfix_operand(child) -> str:
+    """The thing called, indexed or member-accessed: postfix binds tightest,
+    so any operator there needs parens -- `(a + b)[0]` printed as `a + b[0]`
+    means something else entirely."""
+    return f"({child})" if _prec(child) < 99 else str(child)
+
+
+def _condition(child) -> str:
+    """A ternary's condition is an `||`-level expression: a ternary or a
+    let/assert/echo/function literal there needs parens."""
+    return f"({child})" if _prec(child) < _PREC[LogicalOrOp] else str(child)
 
 
 def _collect_hoisted_declarations(nodes, scope: "Scope") -> None:

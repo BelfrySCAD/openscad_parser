@@ -85,3 +85,48 @@ class TestRangeStepWritten:
         from openscad_parser.ast.pretty_print import to_openscad
         assert to_openscad(getASTfromString("for (i = [5:0]) cube(i);")).startswith("for (i = [5 : 0])")
         assert to_openscad(getASTfromString("for (i = [5:1:0]) cube(i);")).startswith("for (i = [5 : 1 : 0])")
+
+
+class TestLineCommentRoundTrip:
+    """89114d9: a `//` comment ends its line, so printing one inline swallowed
+    whatever followed it. Printed code must reparse, keep every comment, and
+    print identically a second time."""
+
+    @pytest.mark.parametrize("src", [
+        "foo(a // one\n, b // two\n, c);",
+        "f(a, // one\n b);",
+        "echo(a, // x\n b);",
+        "assert(a, // c\n \"msg\");",
+        "cube([1, // w\n 2, 3]);",
+        "module m(a, // pa\n b) cube(1);",
+        "function f(a, // pa\n b) = a;",
+        "module m // after name\n(a) cube(1);",
+        "function f // n\n(a) = a;",
+        "module m(a) // post\n{ cube(1); }",
+        "x = [1, // one\n 2];",
+        "x = f(a, // one\n g(b, // two\n c));",
+    ])
+    def test_round_trip(self, src):
+        import re
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.pretty_print import to_openscad
+        out = to_openscad(getASTfromString(src, include_comments=True))
+        again = getASTfromString(out, include_comments=True)
+        assert again is not None, out
+        assert [c.strip() for c in re.findall(r"//[^\n]*", out)] == [c.strip() for c in re.findall(r"//[^\n]*", src)]
+        assert to_openscad(again) == out
+
+
+class TestPrecedenceInPrinting:
+    """What the printer writes must mean what was parsed."""
+
+    @pytest.mark.parametrize("src,want", [
+        ("x = (a + b)[0];", "x = (a + b)[0]"),
+        ("x = (a + b).y;", "x = (a + b).y"),
+        ("x = (a ? b : c) ? d : e;", "x = (a ? b : c) ? d : e"),
+        ("x = (function(y) y)(3);", "x = (function(y) y)(3)"),
+        ("x = (let(a = 1) a) + 2;", "x = (let(a = 1) a) + 2"),
+    ])
+    def test_parens_kept(self, src, want):
+        from openscad_parser.ast import getASTfromString
+        assert str(getASTfromString(src)[0]) == want
