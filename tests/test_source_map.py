@@ -751,3 +751,17 @@ class TestPositionOffsets:
         rest_pos = restored[0].position
         assert rest_pos.start_offset == orig_pos.start_offset
         assert rest_pos.end_offset == orig_pos.end_offset
+
+
+def test_line_and_column_match_counting_newlines():
+    """Lines come from a binary search over each segment's newlines; they
+    must agree with counting the newlines before each offset."""
+    from openscad_parser.ast.source_map import SourceMap
+    code = "a = 1;\n\n  b = [1,\n    2];\nmodule m() {\n  cube(3);\n}\n"
+    sm = SourceMap()
+    sm.add_origin("f.scad", code)
+    for offset in range(len(code) + 1):
+        pos = sm.get_location(offset)
+        before = code[:offset]
+        assert pos.line == before.count("\n") + 1, offset
+        assert pos.column == offset - before.rfind("\n") if "\n" in before else offset + 1, offset
