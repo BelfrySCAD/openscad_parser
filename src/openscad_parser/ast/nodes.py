@@ -52,8 +52,12 @@ class CommentLine(ASTNode):
     
     Attributes:
         text: The comment text without the leading // marker.
+        same_line: True for a comment that ended a statement's line in the
+            source (`x = 1; // why`). It sits in the statement list right
+            after that statement, and is printed at the end of its line.
     """
     text: str
+    same_line: bool = field(default=False, kw_only=True)
 
     def __str__(self):
         return f"//{self.text}"
@@ -128,10 +132,12 @@ class CommentedExpr(Expression):
     expr: Expression
 
     def __str__(self):
-        parts = [str(c) for c in self.leading_comments]
-        parts.append(str(self.expr))
-        parts.extend(str(c) for c in self.trailing_comments)
-        return " ".join(parts)
+        # A `//` comment runs to the end of the line, so a line break always
+        # follows one: printed inline, it commented out whatever came next.
+        out = "".join(f"{c}\n" if isinstance(c, CommentLine) else f"{c} " for c in self.leading_comments)
+        out += str(self.expr)
+        out += "".join(f" {c}\n" if isinstance(c, CommentLine) else f" {c}" for c in self.trailing_comments)
+        return out
 
     def build_scope(self, parent_scope: "Scope") -> None:
         _set_scope(self, parent_scope)
