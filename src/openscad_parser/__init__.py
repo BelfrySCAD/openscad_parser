@@ -16,7 +16,10 @@ def getOpenSCADParser(reduce_tree=False, debug=False, include_comments=False):
     Args:
         reduce_tree: If True, reduce the parse tree (default: False)
         debug: If True, enable debug output (default: False)
-        include_comments: If True, include comments in the AST instead of skipping them (default: False)
+        include_comments: If True, a grammar that parses comments at the points
+            it lists (default: False). The getAST* functions no longer use it:
+            they parse with comments as whitespace and attach them afterwards
+            (openscad_parser.ast.comments), which accepts a comment anywhere.
     
     Returns:
         ParserPython instance configured for OpenSCAD parsing

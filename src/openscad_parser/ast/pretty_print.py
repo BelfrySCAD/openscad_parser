@@ -313,8 +313,12 @@ def _fmt_ternary_chain(expr: TernaryOp, indent: int, w: int) -> str:
 def _fmt_trailing_comments(comments: list, pad: str) -> str:
     """Comments after an expression. After a `//` one the line must end, or
     it would comment out the `,` `)` or `;` its caller adds next."""
-    out = "".join(f" {c}" for c in comments)
-    return out + f"\n{pad}" if comments and isinstance(comments[-1], CommentLine) else out
+    out = ""
+    for c in comments:
+        out += ("" if out.endswith(f"\n{pad}") else " ") + str(c)
+        if isinstance(c, CommentLine):
+            out += f"\n{pad}"  # every one: two on a line would be one comment
+    return out
 
 
 def _fmt_expr(expr, indent: int, w: int) -> str:

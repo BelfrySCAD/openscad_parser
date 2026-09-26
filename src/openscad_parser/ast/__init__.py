@@ -8,6 +8,7 @@ from typing import Optional
 from arpeggio import NoMatch
 from openscad_parser import getOpenSCADParser, strict_commas
 from openscad_parser.grammar import _STRICT_COMMAS
+from .comments import _attach_all_comments
 from .source_map import SourceMap, process_includes as process_includes_func
 
 # Import all AST nodes from nodes
@@ -279,8 +280,11 @@ def getASTfromString(code: str, include_comments: bool = False, origin: str = "<
     source_map = SourceMap()
     source_map.add_origin(origin, code)
     
-    parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
+    # Comments are parsed as whitespace and attached afterwards (see comments.py).
+    parser = getOpenSCADParser(reduce_tree=False)
     ast = parse_ast(parser, code, source_map=source_map)
+    if ast is not None and include_comments:
+        ast = _attach_all_comments(ast, code, origin)
     return ast
 
 
@@ -322,7 +326,8 @@ def _ast_format_tag() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     h = hashlib.sha256()
     for path in (os.path.join(here, "..", "grammar.py"), os.path.join(here, "nodes.py"),
-                 os.path.join(here, "builder.py"), os.path.join(here, "__init__.py")):
+                 os.path.join(here, "builder.py"), os.path.join(here, "__init__.py"),
+                 os.path.join(here, "comments.py")):
         with open(path, "rb") as f:
             h.update(f.read())
     return h.hexdigest()[:16]
@@ -493,8 +498,10 @@ def _parse_single_file(file_path: str, include_comments: bool = False) -> list[A
     source_map = SourceMap()
     source_map.add_origin(file_path, code)
 
-    parser = getOpenSCADParser(reduce_tree=False, include_comments=include_comments)
+    parser = getOpenSCADParser(reduce_tree=False)
     ast = parse_ast(parser, code, source_map=source_map)
+    if ast is not None and include_comments:
+        ast = _attach_all_comments(ast, code, file_path)
 
     # Cache in memory and on disk
     _ast_cache[cache_key] = (ast, current_mtime)
