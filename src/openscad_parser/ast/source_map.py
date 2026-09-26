@@ -5,9 +5,10 @@ editor buffers, etc.) into a single string for parsing while maintaining the
 ability to map positions back to their original origin, line, and column locations.
 """
 
+import bisect
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,6 +31,15 @@ class SourceSegment:
     start_column: int
     content: str
     combined_start: int  # Position in combined string where this segment starts
+    # Offsets of every newline in `content`, built on first use: a position's
+    # line is then a binary search, where counting the newlines before it
+    # made building a file's AST quadratic in its length.
+    _newlines: Optional[list[int]] = field(default=None, repr=False, compare=False)
+
+    def newlines(self) -> list[int]:
+        if self._newlines is None:
+            self._newlines = [m.start() for m in re.finditer("\n", self.content)]
+        return self._newlines
 
 
 class SourceMap:
@@ -352,9 +362,9 @@ class SourceMap:
         if offset > len(segment.content):
             offset = len(segment.content)  # pragma: no cover
 
-        # Count lines in the content up to the offset
-        content_before = segment.content[:offset]
-        line_count = content_before.count('\n')
+        # Newlines before the offset, and the last of them
+        newlines = segment.newlines()
+        line_count = bisect.bisect_left(newlines, offset)
 
         # Calculate line number
         line_number = segment.start_line + line_count
@@ -364,9 +374,7 @@ class SourceMap:
             # Same line as start
             column_number = segment.start_column + offset
         else:
-            # Find the last newline before offset
-            last_newline = content_before.rfind('\n')
-            column_number = offset - last_newline
+            column_number = offset - newlines[line_count - 1]
 
         resolved_end = end_offset if end_offset is not None else offset
 
