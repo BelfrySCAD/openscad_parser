@@ -5,7 +5,7 @@
 from __future__ import unicode_literals
 
 from arpeggio import ParserPython
-from .grammar import openscad_language, openscad_language_with_comments, comment, whitespace_only
+from .grammar import openscad_language, openscad_language_with_comments, comment, whitespace_only, strict_commas
 
 
 # --- The parser ---

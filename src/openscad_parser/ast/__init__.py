@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 import os
@@ -5,7 +6,8 @@ import pickle
 import platform
 from typing import Optional
 from arpeggio import NoMatch
-from openscad_parser import getOpenSCADParser
+from openscad_parser import getOpenSCADParser, strict_commas
+from openscad_parser.grammar import _STRICT_COMMAS
 from .source_map import SourceMap, process_includes as process_includes_func
 
 # Import all AST nodes from nodes
@@ -283,14 +285,15 @@ def getASTfromString(code: str, include_comments: bool = False, origin: str = "<
 
 
 # Module-level in-memory cache for per-file AST trees (no includes resolved)
-# Key: tuple of (absolute file path (str), include_comments (bool))
+# Key: tuple of (absolute file path (str), include_comments (bool), strict_commas (bool))
 # Value: tuple of (AST nodes, modification timestamp)
-_ast_cache: dict[tuple[str, bool], tuple[list[ASTNode] | None, float]] = {}
+_ast_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {}
 
 # Resolved (includes-expanded) cache
-# Key: tuple of (absolute file path (str), include_comments (bool), process_includes (bool))
+# Key: tuple of (absolute file path (str), include_comments (bool), process_includes (bool),
+#      strict_commas (bool))
 # Value: tuple of (AST nodes, modification timestamp)
-_resolved_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {}
+_resolved_cache: dict[tuple[str, bool, bool, bool], tuple[list[ASTNode] | None, float]] = {}
 
 
 def _get_disk_cache_dir() -> Optional[str]:
@@ -311,12 +314,26 @@ def _get_disk_cache_dir() -> Optional[str]:
         return None
 
 
+@functools.lru_cache(maxsize=None)
+def _ast_format_tag() -> str:
+    """Changes whenever the grammar or the AST classes do, so a pickled AST
+    from another version is never served: an older pickle lacks any field
+    added since (RangeLiteral.implicit_step, say) and reads its default."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    h = hashlib.sha256()
+    for path in (os.path.join(here, "..", "grammar.py"), os.path.join(here, "nodes.py"),
+                 os.path.join(here, "builder.py"), os.path.join(here, "__init__.py")):
+        with open(path, "rb") as f:
+            h.update(f.read())
+    return h.hexdigest()[:16]
+
+
 def _disk_cache_path(file_path: str, include_comments: bool) -> Optional[str]:
     """Get the disk cache file path for a given source file."""
     cache_dir = _get_disk_cache_dir()
     if not cache_dir:
         return None  # pragma: no cover
-    key = f"{file_path}:{include_comments}"
+    key = f"{file_path}:{include_comments}:{_STRICT_COMMAS.get()}:{_ast_format_tag()}"
     h = hashlib.sha256(key.encode()).hexdigest()[:16]
     return os.path.join(cache_dir, f"{h}.pickle")
 
@@ -455,7 +472,7 @@ def _parse_single_file(file_path: str, include_comments: bool = False) -> list[A
         raise FileNotFoundError(f"File {file_path} not found")
 
     current_mtime = os.path.getmtime(file_path)
-    cache_key = (file_path, include_comments)
+    cache_key = (file_path, include_comments, _STRICT_COMMAS.get())
 
     # Check in-memory cache
     if cache_key in _ast_cache:
@@ -573,7 +590,7 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
         return _parse_single_file(file_path, include_comments)
 
     # Check resolved cache (in-memory only since resolved ASTs depend on multiple files)
-    resolved_key = (file_path, include_comments, True)
+    resolved_key = (file_path, include_comments, True, _STRICT_COMMAS.get())
     if resolved_key in _resolved_cache:
         cached_ast, cached_mtime = _resolved_cache[resolved_key]
         if cached_mtime == current_mtime:

@@ -153,6 +153,25 @@ The function searches for library files in this order:
 ``librarySearchDirs(currfile)`` returns this list, and a not-found error names
 every directory in it.
 
+Strict Commas
+~~~~~~~~~~~~~
+
+OpenSCAD accepts a trailing comma almost everywhere. OpenSCAD 2021.01 did not:
+it rejected one after a call's last argument (``cube(1,)``) and after the last
+assignment of a ``let``/``for``/``intersection_for`` (``let(x=1,)``), while
+accepting it in list literals, list comprehensions and parameter lists. To
+parse as 2021.01 did:
+
+.. code-block:: python
+
+    from openscad_parser import strict_commas
+
+    with strict_commas():
+        ast = getASTfromFile("model.scad")   # None if it uses a rejected comma
+
+The mode nests, restores on exit, and every AST cache keys on it, so a strict
+parse is never served a lenient tree.
+
 Advanced AST Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
