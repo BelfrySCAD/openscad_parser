@@ -141,11 +141,17 @@ Use ``getASTfromLibraryFile()`` to find and parse library files using OpenSCAD's
 The function searches for library files in this order:
 
 1. Directory of the current file (if provided)
-2. Directories in the ``OPENSCADPATH`` environment variable
-3. Platform-specific default library directories:
-   - Windows: ``~/Documents/OpenSCAD/libraries``
+2. Directories in the ``OPENSCADPATH`` environment variable, which add to the
+   directories below rather than replacing them, as in OpenSCAD
+3. The platform's libraries folder:
+   - Windows: ``OpenSCAD\libraries`` in the Documents folder Windows reports
+     (under OneDrive when Known Folder Move is on)
    - macOS: ``~/Documents/OpenSCAD/libraries``
    - Linux: ``~/.local/share/OpenSCAD/libraries``
+4. A ``libraries`` directory beside the installed package
+
+``librarySearchDirs(currfile)`` returns this list, and a not-found error names
+every directory in it.
 
 Advanced AST Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -492,7 +498,7 @@ Main Functions
 
 ``getASTfromLibraryFile(currfile: str, libfile: str, include_comments: bool = False, process_includes: bool = True)``
     Find and parse an OpenSCAD library file using OpenSCAD's search path rules.
-    Searches in: current file directory, OPENSCADPATH, and platform default paths.
+    Searches the directories ``librarySearchDirs(currfile)`` returns.
 
     :param currfile: Full path to the current OpenSCAD file (can be empty string)
     :param libfile: Partial or full path to the library file to find

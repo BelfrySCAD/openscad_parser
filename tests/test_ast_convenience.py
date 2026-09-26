@@ -425,7 +425,7 @@ class TestGetASTfromLibraryFile:
             with pytest.raises(FileNotFoundError) as exc_info:
                 getASTfromLibraryFile(current_file, "nonexistent.scad")
             
-            assert "not found in search paths" in str(exc_info.value)
+            assert "not found. Searched:" in str(exc_info.value)
         finally:
             os.unlink(current_file)
 
