@@ -293,7 +293,7 @@ _ast_cache: dict[tuple[str, bool, bool], tuple[list[ASTNode] | None, float]] = {
 # Key: tuple of (absolute file path (str), include_comments (bool), process_includes (bool),
 #      strict_commas (bool))
 # Value: tuple of (AST nodes, modification timestamp)
-_resolved_cache: dict[tuple[str, bool, bool, bool], tuple[list[ASTNode] | None, float]] = {}
+_resolved_cache: dict[tuple[str, bool, bool, bool], tuple[list[ASTNode] | None, dict[str, float]]] = {}
 
 
 def _get_disk_cache_dir() -> Optional[str]:
@@ -503,14 +503,30 @@ def _parse_single_file(file_path: str, include_comments: bool = False) -> list[A
     return ast
 
 
+def _deps_unchanged(deps: dict[str, float]) -> bool:
+    """Whether every file a resolution read still has the mtime it had."""
+    try:
+        return all(os.path.getmtime(path) == mtime for path, mtime in deps.items())
+    except OSError:  # one was deleted
+        return False
+
+
 def _resolve_includes(ast_nodes: list[ASTNode] | None, current_file: str,
                       include_comments: bool = False,
-                      visited: set | None = None) -> list[ASTNode] | None:
-    """Resolve IncludeStatement nodes by parsing and inlining referenced files."""
+                      open_files: tuple = (),
+                      deps: dict | None = None) -> list[ASTNode] | None:
+    """Resolve IncludeStatement nodes by parsing and inlining referenced files.
+
+    A file is included every time it is named, as OpenSCAD includes it: an
+    `include` written twice runs the file twice. Only a file already open on
+    this include chain (`open_files`; the top-level file is not one) is
+    refused -- OpenSCAD warns that it can't find it and carries on -- which is
+    what stops a cycle. Every file read is recorded in `deps` with its mtime.
+    """
     if ast_nodes is None:
         return None
-    if visited is None:
-        visited = set()
+    if deps is None:
+        deps = {}
 
     result = []
     for node in ast_nodes:
@@ -520,11 +536,12 @@ def _resolve_includes(ast_nodes: list[ASTNode] | None, current_file: str,
             if lib_file is None:
                 raise FileNotFoundError(_not_found("Included file", filename, current_file))
             lib_file = os.path.abspath(lib_file)
-            if lib_file in visited:
+            if lib_file in open_files:
                 continue
-            visited.add(lib_file)
+            deps[lib_file] = os.path.getmtime(lib_file)
             included_ast = _parse_single_file(lib_file, include_comments)
-            included_ast = _resolve_includes(included_ast, lib_file, include_comments, visited)
+            included_ast = _resolve_includes(included_ast, lib_file, include_comments,
+                                             open_files + (lib_file,), deps)
             if included_ast:
                 result.extend(included_ast)
         else:
@@ -592,19 +609,20 @@ def getASTfromFile(file: str, include_comments: bool = False, process_includes: 
     # Check resolved cache (in-memory only since resolved ASTs depend on multiple files)
     resolved_key = (file_path, include_comments, True, _STRICT_COMMAS.get())
     if resolved_key in _resolved_cache:
-        cached_ast, cached_mtime = _resolved_cache[resolved_key]
-        if cached_mtime == current_mtime:
+        cached_ast, cached_deps = _resolved_cache[resolved_key]
+        if _deps_unchanged(cached_deps):
             return cached_ast
 
     # Parse the file independently (uses per-file cache)
     ast = _parse_single_file(file_path, include_comments)
 
     # Resolve all include statements recursively
-    visited = {file_path}
-    ast = _resolve_includes(ast, file_path, include_comments, visited)
+    deps = {file_path: current_mtime}
+    ast = _resolve_includes(ast, file_path, include_comments, (), deps)
 
-    # Cache the resolved result
-    _resolved_cache[resolved_key] = (ast, current_mtime)
+    # Cache the resolved result, valid while every file it read is unchanged:
+    # keyed on the top file alone, an edited include went unnoticed.
+    _resolved_cache[resolved_key] = (ast, deps)
 
     return ast
 
