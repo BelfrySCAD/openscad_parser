@@ -90,7 +90,7 @@ from .nodes import (
 from .builder import ASTBuilderVisitor, Position
 
 # Import scope classes
-from .scope import Scope, build_scopes
+from .scope import Scope, ScopeTable, build_scopes, build_scopes_into
 
 # Import pretty-printer
 from .pretty_print import to_openscad

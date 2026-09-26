@@ -181,6 +181,39 @@ class TestRenderExpression:
     def test_scopes_its_children(self):
         from openscad_parser.ast import getASTfromString, build_scopes
         ast = getASTfromString("r = 2; o = render() { sphere(r); };")
-        build_scopes(ast)
+        root = build_scopes(ast)
         sphere = ast[1].expr.children[0]
-        assert sphere.scope.lookup_variable("r") is ast[0]
+        assert root.scope_of(sphere).lookup_variable("r") is ast[0]
+
+
+class TestScopeTable:
+    """#7/#8: an included file's nodes are shared by every includer, so a
+    node's scope lives in the table of the pass that built it."""
+
+    def test_two_includers_keep_their_own_scopes(self, tmp_path):
+        from openscad_parser.ast import getASTfromFile, build_scopes
+        (tmp_path / "lib.scad").write_text("function f() = k;\n")
+        (tmp_path / "a.scad").write_text("k = 1;\ninclude <lib.scad>\n")
+        (tmp_path / "b.scad").write_text("k = 2;\ninclude <lib.scad>\n")
+        a = getASTfromFile(str(tmp_path / "a.scad"))
+        b = getASTfromFile(str(tmp_path / "b.scad"))
+        assert a[1] is b[1]  # still shared: no re-parse, no copy
+        root_a, root_b = build_scopes(a), build_scopes(b)
+        body = a[1].expr
+        assert root_a.scope_of(body).lookup_variable("k").expr.val == 1
+        assert root_b.scope_of(body).lookup_variable("k").expr.val == 2
+
+    def test_several_roots_can_share_one_table(self):
+        from openscad_parser.ast import ScopeTable, build_scopes_into, getASTfromString
+        table = ScopeTable()
+        main = getASTfromString("x = 1;")
+        lib = getASTfromString("y = 2;")
+        root_main, root_lib = build_scopes_into(main, table), build_scopes_into(lib, table)
+        assert root_main.table is root_lib.table is table
+        assert table.get(main[0]) is root_main and table.get(lib[0]) is root_lib
+
+    def test_nodes_no_longer_carry_a_scope(self):
+        from openscad_parser.ast import getASTfromString, build_scopes
+        ast = getASTfromString("x = 1;")
+        build_scopes(ast)
+        assert not hasattr(ast[0], "scope")

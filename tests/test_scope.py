@@ -131,7 +131,7 @@ class TestScopeBuilderBasics:
         root = build_scopes(ast)
         assert isinstance(root, Scope)
         assert root.lookup_variable("a") is not None
-        assert ast[0].scope is not None  # type: ignore
+        assert root.scope_of(ast[0]) is not None  # type: ignore
 
     def test_empty_ast(self):
         root = build_scopes([])
@@ -151,12 +151,10 @@ class TestScopeBuilderBasics:
     def test_assignment_scope_attached(self):
         ast = getASTfromString("x = 10;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         # Each node should have scope attached
         assignment = ast[0]
-        assert hasattr(assignment, 'scope')
-        assert assignment.scope is not None  # type: ignore
+        assert root.scope_of(assignment) is not None  # type: ignore
 
     def test_multiple_assignments(self):
         ast = getASTfromString("x = 10; y = 20; z = 30;")
@@ -183,44 +181,42 @@ class TestFunctionScope:
     def test_function_parameters_in_function_scope(self):
         ast = getASTfromString("function foo(a, b) = a + b;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         func_decl = ast[0]
         # The expression (a + b) should have access to parameters
         expr = func_decl.expr  # type: ignore
-        assert expr.scope is not None
-        assert expr.scope.lookup_variable("a") is not None
-        assert expr.scope.lookup_variable("b") is not None
+        assert root.scope_of(expr) is not None
+        assert root.scope_of(expr).lookup_variable("a") is not None
+        assert root.scope_of(expr).lookup_variable("b") is not None
 
     def test_function_sees_outer_variables(self):
         ast = getASTfromString("x = 10; function foo(a) = a + x;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         func_decl = ast[1]
         expr = func_decl.expr  # type: ignore
         # Function should see outer variable x
-        assert expr.scope.lookup_variable("x") is not None
+        assert root.scope_of(expr).lookup_variable("x") is not None
 
     def test_function_parameter_with_default(self):
         """Parameter with default is in function scope; default expr visited in caller scope."""
         ast = getASTfromString("function foo(x, y = 2) = x + y;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         func_decl = ast[0]
-        assert func_decl.expr.scope.lookup_variable("x") is not None  # type: ignore
-        assert func_decl.expr.scope.lookup_variable("y") is not None  # type: ignore
+        assert root.scope_of(func_decl.expr).lookup_variable("x") is not None  # type: ignore
+        assert root.scope_of(func_decl.expr).lookup_variable("y") is not None  # type: ignore
 
     def test_function_parameter_default_visited_in_caller_scope(self):
         """ParameterDeclaration with default: node.default is visited in caller (parent) scope."""
         ast = getASTfromString("function foo(x = 1) = x;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         func_decl = ast[0]
         param = func_decl.parameters[0]  # type: ignore
         assert param.default is not None
         # Default expr is visited in scope.parent; should have a scope attached
-        assert param.default.scope is not None  # type: ignore
+        assert root.scope_of(param.default) is not None  # type: ignore
 
 
 class TestModuleScope:
@@ -238,22 +234,21 @@ class TestModuleScope:
     def test_module_parameters_in_module_scope(self):
         ast = getASTfromString("module foo(size) { cube(size); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         mod_decl = ast[0]
         # Children should have access to parameters
         if mod_decl.children:  # type: ignore
             child = mod_decl.children[0]  # type: ignore
-            assert child.scope.lookup_variable("size") is not None
+            assert root.scope_of(child).lookup_variable("size") is not None
 
     def test_module_parameter_with_default(self):
         """Module with default parameter: default expr is visited in caller scope."""
         ast = getASTfromString("module foo(size = 1) { cube(size); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod_decl = ast[0]
         assert len(mod_decl.children) >= 1  # type: ignore
-        assert mod_decl.children[0].scope.lookup_variable("size") is not None  # type: ignore
+        assert root.scope_of(mod_decl.children[0]).lookup_variable("size") is not None  # type: ignore
 
     def test_nested_function_in_module(self):
         ast = getASTfromString("""
@@ -272,7 +267,7 @@ class TestModuleScope:
         mod_decl = ast[0]
         if mod_decl.children:  # type: ignore
             child = mod_decl.children[0]  # type: ignore
-            assert child.scope.lookup_function("helper") is not None
+            assert root.scope_of(child).lookup_function("helper") is not None
 
 
 class TestHoisting:
@@ -286,13 +281,12 @@ class TestHoisting:
             }
         """)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         mod_decl = ast[0]
         # cube(x) should see x due to hoisting
         if mod_decl.children:  # type: ignore
             cube_call = mod_decl.children[0]  # type: ignore
-            assert cube_call.scope.lookup_variable("x") is not None
+            assert root.scope_of(cube_call).lookup_variable("x") is not None
 
 
 class TestLetExpressions:
@@ -301,8 +295,7 @@ class TestLetExpressions:
     def test_let_op_creates_scope(self):
         ast = getASTfromString("x = let(a=1, b=2) a + b;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         # The let expression should create a scope with a and b
         assignment = ast[0]
         let_op = assignment.expr  # type: ignore
@@ -310,9 +303,8 @@ class TestLetExpressions:
 
         # The body should have access to let variables
         body = let_op.body
-        assert hasattr(body, 'scope')
-        assert body.scope.lookup_variable("a") is not None  # type: ignore
-        assert body.scope.lookup_variable("b") is not None  # type: ignore
+        assert root.scope_of(body).lookup_variable("a") is not None  # type: ignore
+        assert root.scope_of(body).lookup_variable("b") is not None  # type: ignore
 
     def test_let_variables_not_in_outer_scope(self):
         ast = getASTfromString("x = let(a=1) a; y = 2;")
@@ -329,8 +321,7 @@ class TestModularConstructs:
     def test_modular_for_creates_scope(self):
         ast = getASTfromString("for (i = [1:10]) cube(i);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         for_node = ast[0]
         assert isinstance(for_node, ModularFor)
 
@@ -338,22 +329,19 @@ class TestModularConstructs:
         body = for_node.body
         if isinstance(body, list):
             body = body[0]
-        assert hasattr(body, 'scope')
-        assert body.scope.lookup_variable("i") is not None  # type: ignore
+        assert root.scope_of(body).lookup_variable("i") is not None  # type: ignore
 
     def test_modular_if_creates_scope(self):
         ast = getASTfromString("if (true) { x = 10; cube(x); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         if_node = ast[0]
         assert isinstance(if_node, ModularIf)
 
     def test_modular_let_creates_scope(self):
         ast = getASTfromString("let(x=10) cube(x);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         let_node = ast[0]
         assert isinstance(let_node, ModularLet)
 
@@ -361,60 +349,60 @@ class TestModularConstructs:
         """ModularIf with single statement (list true_branch with one element)."""
         ast = getASTfromString("if (true) cube(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         if_node = ast[0]
         assert isinstance(if_node, ModularIf)
         assert isinstance(if_node.true_branch, list)
-        assert if_node.true_branch[0].scope is not None  # type: ignore
+        assert root.scope_of(if_node.true_branch[0]) is not None  # type: ignore
 
     def test_modular_if_else_single_branches(self):
         """ModularIfElse with single-statement branches (list true/false_branch)."""
         ast = getASTfromString("if (true) cube(1); else sphere(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         if_node = ast[0]
         assert isinstance(if_node, ModularIfElse)
         assert isinstance(if_node.true_branch, list)
         assert isinstance(if_node.false_branch, list)
-        assert if_node.true_branch[0].scope is not None  # type: ignore
-        assert if_node.false_branch[0].scope is not None  # type: ignore
+        assert root.scope_of(if_node.true_branch[0]) is not None  # type: ignore
+        assert root.scope_of(if_node.false_branch[0]) is not None  # type: ignore
 
     def test_modular_for_list_body(self):
         """ModularFor with statement block (list body) or single statement."""
         ast = getASTfromString("for (i = [1:3]) { cube(i); sphere(i); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         for_node = ast[0]
         assert isinstance(for_node, ModularFor)
         body = for_node.body
         first = body[0] if isinstance(body, list) else body
-        assert first.scope.lookup_variable("i") is not None  # type: ignore
+        assert root.scope_of(first).lookup_variable("i") is not None  # type: ignore
 
     def test_modular_echo_with_children(self):
         """ModularEcho with child statement gets children scope."""
         ast = getASTfromString('echo("ok") cube(1);')
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         echo_node = ast[0]
         assert isinstance(echo_node, ModularEcho)
         assert len(echo_node.children) >= 1
-        assert echo_node.children[0].scope is not None  # type: ignore
+        assert root.scope_of(echo_node.children[0]) is not None  # type: ignore
 
     def test_modular_assert_with_children(self):
         """ModularAssert with child statement gets children scope."""
         ast = getASTfromString("assert(true) cube(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         assert_node = ast[0]
         assert isinstance(assert_node, ModularAssert)
         assert len(assert_node.children) >= 1
-        assert assert_node.children[0].scope is not None  # type: ignore
+        assert root.scope_of(assert_node.children[0]) is not None  # type: ignore
 
     def test_modular_call_empty_children(self):
         """ModularCall with empty block: if node.children is falsy, skip children scope."""
         ast = getASTfromString("cube(1) { }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         call = ast[0]
         assert isinstance(call, ModularCall)
         assert len(call.children) == 0
@@ -422,34 +410,34 @@ class TestModularConstructs:
     def test_modifier_show_only(self):
         ast = getASTfromString("! cube(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod = ast[0]
         assert isinstance(mod, ModularModifierShowOnly)
-        assert mod.child.scope is not None  # type: ignore
+        assert root.scope_of(mod.child) is not None  # type: ignore
 
     def test_modifier_highlight(self):
         ast = getASTfromString("# sphere(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod = ast[0]
         assert isinstance(mod, ModularModifierHighlight)
-        assert mod.child.scope is not None  # type: ignore
+        assert root.scope_of(mod.child) is not None  # type: ignore
 
     def test_modifier_background(self):
         ast = getASTfromString("% cube(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod = ast[0]
         assert isinstance(mod, ModularModifierBackground)
-        assert mod.child.scope is not None  # type: ignore
+        assert root.scope_of(mod.child) is not None  # type: ignore
 
     def test_modifier_disable(self):
         ast = getASTfromString("* cube(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod = ast[0]
         assert isinstance(mod, ModularModifierDisable)
-        assert mod.child.scope is not None  # type: ignore
+        assert root.scope_of(mod.child) is not None  # type: ignore
 
 
 class TestFunctionLiteralRecursion:
@@ -458,42 +446,40 @@ class TestFunctionLiteralRecursion:
     def test_function_literal_sees_assigned_variable(self):
         ast = getASTfromString("fn = function(n) n == 0 ? 1 : n * fn(n-1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         assignment = ast[0]
         func_lit = assignment.expr  # type: ignore
         assert isinstance(func_lit, FunctionLiteral)
 
         # The function body should see 'fn' for recursion
         body = func_lit.body
-        assert hasattr(body, 'scope')
-        assert body.scope.lookup_variable("fn") is not None  # type: ignore
+        assert root.scope_of(body).lookup_variable("fn") is not None  # type: ignore
 
     def test_function_literal_with_default_parameter(self):
         """Function literal with default parameter visits default in caller scope."""
         ast = getASTfromString("f = function(x = 1) x;")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         assignment = ast[0]
         func_lit = assignment.expr  # type: ignore
-        assert func_lit.body.scope.lookup_variable("x") is not None  # type: ignore
+        assert root.scope_of(func_lit.body).lookup_variable("x") is not None  # type: ignore
 
     def test_function_literal_in_expression(self):
         """FunctionLiteral in expression (not assigned) gets scope with pending_var=None."""
         ast = getASTfromString("x = (function(a) a)(1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         # FunctionLiteral is inside PrimaryCall; body should see param a
         assign = ast[0]
         pc = assign.expr  # type: ignore
         fl = pc.left  # type: ignore
-        assert fl.body.scope.lookup_variable("a") is not None  # type: ignore
+        assert root.scope_of(fl.body).lookup_variable("a") is not None  # type: ignore
 
     def test_function_literal_in_ternary_rhs_sees_assigned_variable(self):
         """Function literals in a ternary RHS should see the variable being assigned."""
         ast = getASTfromString("a = b ? function(x, n) a(x + n, n - 1) : function(x, n) a(x * n, n - 1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         assignment = ast[0]
         ternary = assignment.expr  # type: ignore
         true_fl = ternary.true_expr  # type: ignore
@@ -501,8 +487,8 @@ class TestFunctionLiteralRecursion:
         assert isinstance(true_fl, FunctionLiteral)
         assert isinstance(false_fl, FunctionLiteral)
         # Both function bodies should see 'a' for recursion
-        assert true_fl.body.scope.lookup_variable("a") is not None  # type: ignore
-        assert false_fl.body.scope.lookup_variable("a") is not None  # type: ignore
+        assert root.scope_of(true_fl.body).lookup_variable("a") is not None  # type: ignore
+        assert root.scope_of(false_fl.body).lookup_variable("a") is not None  # type: ignore
 
 
 class TestModularCallChildren:
@@ -512,24 +498,24 @@ class TestModularCallChildren:
         """ModularCall with NamedArgument visits name and expr."""
         ast = getASTfromString("cube(size=1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         call = ast[0]
         assert isinstance(call, ModularCall)
         assert len(call.arguments) >= 1
-        assert call.arguments[0].name.scope is not None  # type: ignore
+        assert root.scope_of(call.arguments[0].name) is not None  # type: ignore
 
     def test_primary_call_named_argument_visits_name(self):
         """PrimaryCall with NamedArgument: _visit_node visits arg.name (Identifier)."""
         ast = getASTfromString("a = cube(size=1);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         assign = ast[0]
         assert hasattr(assign, "expr")
         pc = assign.expr  # type: ignore
         assert hasattr(pc, "arguments") and len(pc.arguments) >= 1  # type: ignore
         arg0 = pc.arguments[0]  # type: ignore
         if hasattr(arg0, "name"):  # NamedArgument
-            assert arg0.name.scope is not None  # type: ignore
+            assert root.scope_of(arg0.name) is not None  # type: ignore
 
     def test_modular_call_children_scope(self):
         ast = getASTfromString("""
@@ -540,8 +526,7 @@ class TestModularCallChildren:
             }
         """)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         # Find the modular call
         mod_call = ast[1]
         assert isinstance(mod_call, ModularCall)
@@ -550,8 +535,7 @@ class TestModularCallChildren:
         if mod_call.children:
             child = mod_call.children[0]
             # x should be visible in children scope due to hoisting
-            assert hasattr(child, 'scope')
-            assert child.scope.lookup_variable("x") is not None  # type: ignore
+            assert root.scope_of(child).lookup_variable("x") is not None  # type: ignore
 
 
 class TestScopeLookup:
@@ -561,21 +545,21 @@ class TestScopeLookup:
         """lookup_function finds function in grandparent when not in parent."""
         ast = getASTfromString("function f() = 1; module m() { g = f(); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod_decl = ast[1]
         # Assignment g=f() is in module; f is in root
         assign = next(c for c in mod_decl.children if isinstance(c, Assignment))  # type: ignore
-        assert assign.scope.lookup_function("f") is not None  # type: ignore
+        assert root.scope_of(assign).lookup_function("f") is not None  # type: ignore
 
     def test_lookup_module_in_ancestor_scope(self):
         """lookup_module finds module in grandparent when not in parent."""
         ast = getASTfromString("module outer() { function inner() = 1; }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         mod_decl = ast[0]
         func_decl = next(c for c in mod_decl.children if isinstance(c, FunctionDeclaration))  # type: ignore
         # inner's expr scope: function -> module -> root; outer is in root
-        assert func_decl.expr.scope.lookup_module("outer") is not None  # type: ignore
+        assert root.scope_of(func_decl.expr).lookup_module("outer") is not None  # type: ignore
 
     def test_lookup_in_parent_scope(self):
         ast = getASTfromString("""
@@ -583,15 +567,14 @@ class TestScopeLookup:
             function foo(a) = a + x;
         """)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         func_decl = ast[1]
         expr = func_decl.expr  # type: ignore
 
         # x is not in function scope directly, but should be found in parent
-        assert expr.scope.lookup_variable("x") is not None
+        assert root.scope_of(expr).lookup_variable("x") is not None
         # a is in function scope directly
-        assert expr.scope.lookup_variable("a") is not None
+        assert root.scope_of(expr).lookup_variable("a") is not None
 
     def test_shadowing(self):
         ast = getASTfromString("""
@@ -599,16 +582,15 @@ class TestScopeLookup:
             function foo(x) = x + 1;
         """)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-
+        root = build_scopes(ast)
         func_decl = ast[1]
         expr = func_decl.expr  # type: ignore
 
         # x in function scope should be the parameter, not global
-        x_binding = expr.scope.lookup_variable("x")
+        x_binding = root.scope_of(expr).lookup_variable("x")
         assert x_binding is not None
         # It should be the parameter, which is in the local scope
-        assert "x" in expr.scope.variables
+        assert "x" in root.scope_of(expr).variables
 
 
 class TestThreeNamespaces:
@@ -643,68 +625,68 @@ class TestListComprehensionScope:
     def test_list_comp_for_scope(self):
         ast = getASTfromString("x = [for (i = [0:2]) i];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_for = comp.elements[0]
         assert isinstance(lc_for, ListCompFor)
-        assert lc_for.body.scope.lookup_variable("i") is not None  # type: ignore
+        assert root.scope_of(lc_for.body).lookup_variable("i") is not None  # type: ignore
 
     def test_list_comp_c_for_scope(self):
         ast = getASTfromString("x = [for (i = 0; i < 3; i = i + 1) i];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_cfor = comp.elements[0]
         assert isinstance(lc_cfor, ListCompCFor)
-        assert lc_cfor.body.scope.lookup_variable("i") is not None  # type: ignore
+        assert root.scope_of(lc_cfor.body).lookup_variable("i") is not None  # type: ignore
 
     def test_list_comp_let_scope(self):
         """ListCompLet with body that matches listcomp_elements (nested for)."""
         ast = getASTfromString("x = [let(a = 1) for (i = [0:1]) a];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_let = comp.elements[0]
         assert isinstance(lc_let, ListCompLet)
-        assert lc_let.body.scope.lookup_variable("a") is not None  # type: ignore
+        assert root.scope_of(lc_let.body).lookup_variable("a") is not None  # type: ignore
 
     def test_list_comp_if_scope(self):
         """ListCompIf (for body) visits condition and true_expr (no new scope)."""
         ast = getASTfromString("x = [for (i = [0:5]) if (i > 0) i];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_for = comp.elements[0]
         assert isinstance(lc_for, ListCompFor)
         assert isinstance(lc_for.body, ListCompIf)
-        assert lc_for.body.true_expr.scope is not None  # type: ignore
+        assert root.scope_of(lc_for.body.true_expr) is not None  # type: ignore
 
     def test_list_comp_if_else_scope(self):
         """ListCompIfElse (for body) visits condition, true_expr, false_expr (no new scope)."""
         ast = getASTfromString("x = [for (i = [0:5]) if (i > 0) i else -i];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_for = comp.elements[0]
         assert isinstance(lc_for, ListCompFor)
         assert isinstance(lc_for.body, ListCompIfElse)
-        assert lc_for.body.true_expr.scope is not None  # type: ignore
-        assert lc_for.body.false_expr.scope is not None  # type: ignore
+        assert root.scope_of(lc_for.body.true_expr) is not None  # type: ignore
+        assert root.scope_of(lc_for.body.false_expr) is not None  # type: ignore
 
     def test_list_comp_each_scope(self):
         ast = getASTfromString("x = [each [1, 2, 3]];")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         comp = ast[0].expr  # type: ignore
         assert isinstance(comp, ListComprehension)
         lc_each = comp.elements[0]
         assert isinstance(lc_each, ListCompEach)
-        assert lc_each.body.scope is not None  # type: ignore
+        assert root.scope_of(lc_each.body) is not None  # type: ignore
 
 
 class TestExpressionOpBuildScope:
@@ -713,130 +695,130 @@ class TestExpressionOpBuildScope:
     def _parse_and_scope(self, code):
         ast = getASTfromString(code)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
-        return ast
+        root = build_scopes(ast)
+        return ast, root
 
     def test_echo_op_scope(self):
-        ast = self._parse_and_scope("x = echo(1) 2;")
+        ast, root = self._parse_and_scope("x = echo(1) 2;")
         echo_op = ast[0].expr  # type: ignore
         assert isinstance(echo_op, EchoOp)
-        assert echo_op.body.scope is not None
+        assert root.scope_of(echo_op.body) is not None
 
     def test_assert_op_scope(self):
-        ast = self._parse_and_scope("x = assert(true) 1;")
+        ast, root = self._parse_and_scope("x = assert(true) 1;")
         assert_op = ast[0].expr  # type: ignore
         assert isinstance(assert_op, AssertOp)
-        assert assert_op.body.scope is not None
+        assert root.scope_of(assert_op.body) is not None
 
     def test_division_op_scope(self):
-        ast = self._parse_and_scope("x = a / b;")
+        ast, root = self._parse_and_scope("x = a / b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, DivisionOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_modulo_op_scope(self):
-        ast = self._parse_and_scope("x = a % b;")
+        ast, root = self._parse_and_scope("x = a % b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, ModuloOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_exponent_op_scope(self):
-        ast = self._parse_and_scope("x = a ^ b;")
+        ast, root = self._parse_and_scope("x = a ^ b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, ExponentOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_bitwise_and_op_scope(self):
-        ast = self._parse_and_scope("x = a & b;")
+        ast, root = self._parse_and_scope("x = a & b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, BitwiseAndOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_bitwise_or_op_scope(self):
-        ast = self._parse_and_scope("x = a | b;")
+        ast, root = self._parse_and_scope("x = a | b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, BitwiseOrOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_bitwise_not_op_scope(self):
-        ast = self._parse_and_scope("x = ~a;")
+        ast, root = self._parse_and_scope("x = ~a;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, BitwiseNotOp)
-        assert op.expr.scope is not None
+        assert root.scope_of(op.expr) is not None
 
     def test_bitwise_shift_left_op_scope(self):
-        ast = self._parse_and_scope("x = a << b;")
+        ast, root = self._parse_and_scope("x = a << b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, BitwiseShiftLeftOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_bitwise_shift_right_op_scope(self):
-        ast = self._parse_and_scope("x = a >> b;")
+        ast, root = self._parse_and_scope("x = a >> b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, BitwiseShiftRightOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_logical_and_op_scope(self):
-        ast = self._parse_and_scope("x = a && b;")
+        ast, root = self._parse_and_scope("x = a && b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, LogicalAndOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_logical_or_op_scope(self):
-        ast = self._parse_and_scope("x = a || b;")
+        ast, root = self._parse_and_scope("x = a || b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, LogicalOrOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_logical_not_op_scope(self):
-        ast = self._parse_and_scope("x = !a;")
+        ast, root = self._parse_and_scope("x = !a;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, LogicalNotOp)
-        assert op.expr.scope is not None
+        assert root.scope_of(op.expr) is not None
 
     def test_inequality_op_scope(self):
-        ast = self._parse_and_scope("x = a != b;")
+        ast, root = self._parse_and_scope("x = a != b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, InequalityOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_greater_than_or_equal_op_scope(self):
-        ast = self._parse_and_scope("x = a >= b;")
+        ast, root = self._parse_and_scope("x = a >= b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, GreaterThanOrEqualOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_less_than_or_equal_op_scope(self):
-        ast = self._parse_and_scope("x = a <= b;")
+        ast, root = self._parse_and_scope("x = a <= b;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, LessThanOrEqualOp)
-        assert op.left.scope is not None
-        assert op.right.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.right) is not None
 
     def test_primary_index_scope(self):
-        ast = self._parse_and_scope("x = arr[i];")
+        ast, root = self._parse_and_scope("x = arr[i];")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, PrimaryIndex)
-        assert op.left.scope is not None
-        assert op.index.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.index) is not None
 
     def test_primary_member_scope(self):
-        ast = self._parse_and_scope("x = v.y;")
+        ast, root = self._parse_and_scope("x = v.y;")
         op = ast[0].expr  # type: ignore
         assert isinstance(op, PrimaryMember)
-        assert op.left.scope is not None
-        assert op.member.scope is not None
+        assert root.scope_of(op.left) is not None
+        assert root.scope_of(op.member) is not None
 
 
 class TestIntersectionForBuildScope:
@@ -845,21 +827,21 @@ class TestIntersectionForBuildScope:
     def test_modular_intersection_for_scope(self):
         ast = getASTfromString("intersection_for (i = [0:2]) cube(i);")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         node = ast[0]
         assert isinstance(node, ModularIntersectionFor)
         body = node.body[0] if isinstance(node.body, list) else node.body
-        assert body.scope is not None
-        assert body.scope.lookup_variable("i") is not None
+        assert root.scope_of(body) is not None
+        assert root.scope_of(body).lookup_variable("i") is not None
 
     def test_modular_intersection_for_block_body(self):
         ast = getASTfromString("intersection_for (i = [0:2]) { cube(i); sphere(i); }")
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         node = ast[0]
         assert isinstance(node, ModularIntersectionFor)
         body = node.body[0] if isinstance(node.body, list) else node.body
-        assert body.scope.lookup_variable("i") is not None
+        assert root.scope_of(body).lookup_variable("i") is not None
 
 
 class TestHoistedModuleDeclaration:
@@ -873,12 +855,12 @@ class TestHoistedModuleDeclaration:
             }
         """)
         assert ast is not None and isinstance(ast, list)
-        build_scopes(ast)
+        root = build_scopes(ast)
         outer = ast[0]
         assert isinstance(outer, ModuleDeclaration)
         # inner() call should see inner module via hoisting
         call = next(c for c in outer.children if isinstance(c, ModularCall))  # type: ignore
-        assert call.scope.lookup_module("inner") is not None
+        assert root.scope_of(call).lookup_module("inner") is not None
 
     def test_nested_module_not_visible_in_outer_scope(self):
         ast = getASTfromString("""
