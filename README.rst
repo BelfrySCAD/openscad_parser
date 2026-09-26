@@ -144,10 +144,12 @@ The function searches for library files in this order:
 2. Directories in the ``OPENSCADPATH`` environment variable, which add to the
    directories below rather than replacing them, as in OpenSCAD
 3. The platform's libraries folder:
+
    - Windows: ``OpenSCAD\libraries`` in the Documents folder Windows reports
      (under OneDrive when Known Folder Move is on)
    - macOS: ``~/Documents/OpenSCAD/libraries``
    - Linux: ``~/.local/share/OpenSCAD/libraries``
+
 4. A ``libraries`` directory beside the installed package
 
 ``librarySearchDirs(currfile)`` returns this list, and a not-found error names
