@@ -559,14 +559,14 @@ class TestASTBuilderVisitorEdgeCases:
         call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
                            arguments=[], children=[], position=Position("", 1, 1))
 
-        sc_for = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        sc_for = SemanticChildren([assignment, call], {"assignments_expr": [[assignment]], "child_statement": [[call]]})
         mod_for = visitor.visit_modular_for(None, sc_for)
         assert isinstance(mod_for, ModularFor)
         assert mod_for.assignments == [assignment]
         assert mod_for.body == [call]
 
         num = NumberLiteral(val=1.0, position=Position("", 1, 1))
-        sc_let = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        sc_let = SemanticChildren([assignment, call], {"assignments_expr": [[assignment]], "child_statement": [[call]]})
         mod_let = visitor.visit_modular_let(None, sc_let)
         assert isinstance(mod_let, ModularLet)
         assert mod_let.assignments == [assignment]
@@ -595,7 +595,7 @@ class TestASTBuilderVisitorEdgeCases:
         call = ModularCall(name=Identifier(name="cube", position=Position("", 1, 1)),
                            arguments=[], children=[], position=Position("", 1, 1))
 
-        sc = SemanticChildren([assignment, call], {"child_statement": [[call]]})
+        sc = SemanticChildren([assignment, call], {"assignments_expr": [[assignment]], "child_statement": [[call]]})
         mod_for = visitor.visit_modular_intersection_for(None, sc)
         assert isinstance(mod_for, ModularIntersectionFor)
         assert mod_for.assignments == [assignment]
@@ -807,3 +807,23 @@ class TestASTBuilderVisitorEdgeCases:
         # Test with mismatched operands/operators (triggers fallback)
         result = visitor.visit_prec_binary_or(node, [expr1, expr2, expr3])
         assert isinstance(result, BitwiseOrOp)
+
+
+class TestHeaderAssignmentsOnly:
+    """A braced body's assignments are the body's, not loop or let variables:
+    `for (i = [0:1]) { a = i; }` iterated `a` too, and printed as
+    `for (i = [0 : 1], a = i) { a = i; }`."""
+
+    @pytest.mark.parametrize("src,header", [
+        ("for (i = [0:1]) { a = i; cube(a); }", ["i = [0 : 1]"]),
+        ("intersection_for (i = [0:1]) { a = i; cube(a); }", ["i = [0 : 1]"]),
+        ("let (x = 1) { a = x; cube(a); }", ["x = 1"]),
+        ("for (i = [0:1], j = [0:i]) { k = j; cube(k); }", ["i = [0 : 1]", "j = [0 : i]"]),
+        ("for () { a = 1; cube(a); }", []),
+    ])
+    def test_body_assignments_stay_in_the_body(self, src, header):
+        from openscad_parser.ast import getASTfromString
+        from openscad_parser.ast.pretty_print import to_openscad
+        ast = getASTfromString(src)
+        assert [str(a) for a in ast[0].assignments] == header
+        assert to_openscad(getASTfromString(to_openscad(ast))) == to_openscad(ast)

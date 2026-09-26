@@ -1101,8 +1101,14 @@ class ASTBuilderVisitor(PTNodeVisitor):
             position=self._get_node_position(node)
         )
     
+    def _header_assignments(self, children) -> list:
+        """The `(...)` list's assignments only. Filtering `children` for
+        Assignments also took every assignment in a braced body -- `for (i =
+        [0:1]) { a = i; }` made `a` a loop variable."""
+        return list(children.get_rule('assignments_expr') or [])
+
     def visit_modular_for(self, node, children):
-        assignments = [c for c in children if isinstance(c, Assignment)]
+        assignments = self._header_assignments(children)
         body = children.get_rule('child_statement')
         return ModularFor(
             assignments=assignments,
@@ -1111,12 +1117,12 @@ class ASTBuilderVisitor(PTNodeVisitor):
         )
 
     def visit_modular_intersection_for(self, node, children):
-        assignments = [c for c in children if isinstance(c, Assignment)]
+        assignments = self._header_assignments(children)
         body = children.get_rule('child_statement')
         return ModularIntersectionFor(assignments=assignments, body=body, position=self._get_node_position(node))
 
     def visit_modular_let(self, node, children):
-        assignments = [c for c in children if isinstance(c, Assignment)]
+        assignments = self._header_assignments(children)
         mods = children.get_rule('child_statement')
         return ModularLet(assignments=assignments, children=mods, position=self._get_node_position(node))
     
