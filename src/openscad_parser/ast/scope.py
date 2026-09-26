@@ -17,6 +17,42 @@ if TYPE_CHECKING:
     )
 
 
+class ScopeTable:
+    """Where each node's Scope lives, now that it cannot live in the node.
+
+    A parsed file is shared: an included library is parsed once and handed
+    to every file that includes it, which is what makes a second includer of
+    BOSL2 cost milliseconds rather than a re-parse. But `include` means
+    "share my scope", so the very same node sits in a different scope in
+    every file that includes it. A `scope` attribute on the node could only
+    hold one of them, and whichever file built its scopes last overwrote the
+    others' (openscad_cpp_parser #7/#8, where the same move was made).
+
+    One table per scope-building pass: build_scopes() makes one and hangs it
+    on the root it returns (`root.table`), and every Scope created under
+    that root shares it. build_scopes_into() records into one the caller
+    owns, for a resolution that spans several roots (each `use`d file has a
+    root of its own, but they are read back through one evaluation).
+    """
+
+    def __init__(self) -> None:
+        # Keyed by id(node); the node is kept alongside, both so an id reused
+        # after the node is freed never matches and so the node stays alive
+        # as long as its entry does.
+        self._scopes: dict[int, tuple["ASTNode", "Scope"]] = {}
+
+    def get(self, node: "ASTNode") -> Optional["Scope"]:
+        """The scope visible at `node`, or None if this table never saw it."""
+        hit = self._scopes.get(id(node))
+        return hit[1] if hit is not None and hit[0] is node else None
+
+    def set(self, node: "ASTNode", scope: "Scope") -> None:
+        self._scopes[id(node)] = (node, scope)
+
+    def __len__(self) -> int:
+        return len(self._scopes)
+
+
 @dataclass
 class Scope:
     """Represents a lexical scope in OpenSCAD.
@@ -42,6 +78,18 @@ class Scope:
     variables: dict[str, "Assignment | ParameterDeclaration"] = field(default_factory=dict)
     functions: dict[str, "FunctionDeclaration"] = field(default_factory=dict)
     modules: dict[str, "ModuleDeclaration"] = field(default_factory=dict)
+    # Where the nodes built under this scope record theirs: the parent's for
+    # a child scope, a fresh one for a root unless one is passed in.
+    table: ScopeTable = field(default=None, repr=False, compare=False)  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.table is None:
+            self.table = self.parent.table if self.parent is not None else ScopeTable()
+
+    def scope_of(self, node: "ASTNode") -> Optional["Scope"]:
+        """The scope visible at `node`, as recorded by the pass that built
+        this scope: `root.scope_of(node)` after `root = build_scopes(ast)`."""
+        return self.table.get(node)
 
     def lookup_variable(self, name: str) -> Optional["Assignment | ParameterDeclaration"]:
         """Look up a variable by name, searching parent scopes."""
@@ -95,7 +143,8 @@ def build_scopes(ast: List["ASTNode"]) -> Scope:
     """Build scope tree for a list of top-level AST nodes.
 
     Creates a root scope, hoists top-level declarations into it, then calls
-    build_scope() on each node so every node in the tree gets its scope set.
+    build_scope() on each node so every node in the tree gets its scope
+    recorded -- in `root.table`, read back with `root.scope_of(node)`.
 
     Args:
         ast: List of top-level AST nodes.
@@ -103,9 +152,16 @@ def build_scopes(ast: List["ASTNode"]) -> Scope:
     Returns:
         The root scope containing top-level bindings.
     """
+    return build_scopes_into(ast, ScopeTable())
+
+
+def build_scopes_into(ast: List["ASTNode"], table: ScopeTable) -> Scope:
+    """build_scopes(), recording into a table the caller owns, which several
+    roots may share -- one per `use`d file, read back through one evaluation.
+    """
     from .nodes import Assignment, FunctionDeclaration, ModuleDeclaration
 
-    root_scope = Scope()
+    root_scope = Scope(table=table)
 
     # Hoist top-level declarations so all siblings can see each other
     for node in ast:

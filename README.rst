@@ -548,10 +548,15 @@ Main Functions
     This function removes all cached AST trees from memory.
 
 ``build_scopes(ast: list[ASTNode]) -> Scope``
-    Build a scope tree over an AST and attach a ``scope`` attribute to every node.
+    Build a scope tree over an AST, recording every node's scope in a ``ScopeTable``
+    hung on the root (``root.table``). Read a node's scope with ``root.scope_of(node)``.
 
     :param ast: A list of top-level AST nodes (as returned by the ``getAST*`` functions)
     :returns: The root ``Scope`` object
+
+``build_scopes_into(ast: list[ASTNode], table: ScopeTable) -> Scope``
+    The same, recording into a ``ScopeTable`` the caller owns, so several roots (one per
+    ``use``\ d file, say) can be read back through one table.
 
 ``Scope``
     Represents a lexical scope with three independent namespaces (variables, functions,
@@ -989,14 +994,21 @@ names according to OpenSCAD's three-namespace scoping rules::
     print(root_scope.lookup_variable("x"))   # Assignment node
     print(root_scope.lookup_module("box"))   # ModuleDeclaration node
 
-    # Each AST node has a .scope attribute pointing to its enclosing scope
+    # Every node's enclosing scope, as this pass built it
     box_decl = ast[1]
     cube_call = box_decl.children[0]
-    print(cube_call.scope.lookup_variable("size"))  # ParameterDeclaration node
+    print(root_scope.scope_of(cube_call).lookup_variable("size"))  # ParameterDeclaration node
 
-``build_scopes(ast)`` returns the root ``Scope`` object and attaches a ``scope`` attribute
-to every node in the tree. Scopes form a parent chain so lookups fall through to enclosing
-scopes automatically. Declarations (variables, functions, modules) inside a block are
+``build_scopes(ast)`` returns the root ``Scope`` object and records the scope of every node
+in the tree in ``root_scope.table``. Scopes form a parent chain so lookups fall through to
+enclosing scopes automatically.
+
+A node's scope is not an attribute of the node. An included file is parsed once and its
+nodes are shared by every file that includes it, but ``include`` puts them in the
+*includer's* scope, so the same node sits in a different scope for each includer. Each
+``build_scopes()`` call therefore has its own table, and two files that include the same
+library can be scoped, and used, at the same time. (Before 3.0, ``node.scope`` held the
+scope of whichever file had built its scopes last.) Declarations (variables, functions, modules) inside a block are
 hoisted to the top of that block's scope before child nodes are visited.
 
 Testing
