@@ -63,6 +63,7 @@ from .nodes import (
     LessThanOrEqualOp,
     FunctionLiteral,
     PrimaryCall,
+    RenderExpression,
     PrimaryIndex,
     PrimaryMember,
     VectorElement,
@@ -142,6 +143,8 @@ _NODE_REGISTRY: dict[str, type[ASTNode]] = {
         # Function/Call expressions
         FunctionLiteral,
         PrimaryCall,
+        RenderExpression,
+    RenderExpression,
         PrimaryIndex,
         PrimaryMember,
         # List comprehension

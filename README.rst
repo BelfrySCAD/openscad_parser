@@ -395,6 +395,7 @@ Expressions
 - ``AssertOp(arguments: list[Argument], body: Expression)``: assert clause  ``assert(arguments) body``
 - ``FunctionLiteral(parameters: list[ParameterDeclaration], body: Expression)``: Anonymous function expression  ``function(parameters) body``
 - ``PrimaryCall(left: Expression, arguments: list[Argument])``: Function calls  ``left(arguments)``
+- ``RenderExpression(arguments: list[Argument], children: list[ModuleInstantiation])``: Geometry measured as a value  ``render(arguments) { children }``. Braces required; ``render`` stays usable as an ordinary name. Not part of upstream OpenSCAD
 - ``PrimaryIndex(left: Expression, index: Expression)``: Array indexing ``left[index]``
 - ``PrimaryMember(left: Expression, member: Identifier)``: Member access ``left.member``
 

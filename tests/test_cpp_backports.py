@@ -130,3 +130,57 @@ class TestPrecedenceInPrinting:
     def test_parens_kept(self, src, want):
         from openscad_parser.ast import getASTfromString
         assert str(getASTfromString(src)[0]) == want
+
+
+class TestRenderExpression:
+    """#5: `render() { ... }` in expression position."""
+
+    def _expr(self, src):
+        from openscad_parser.ast import getASTfromString
+        ast = getASTfromString(src)
+        assert ast is not None, src
+        return ast[0].expr
+
+    def test_parses_with_arguments_and_children(self):
+        from openscad_parser.ast import RenderExpression, ModularCall, NamedArgument
+        e = self._expr("obj = render(convexity=2) { cube(1); sphere(2); };")
+        assert type(e) is RenderExpression
+        assert [type(a) for a in e.arguments] == [NamedArgument]
+        assert [c.name.name for c in e.children if isinstance(c, ModularCall)] == ["cube", "sphere"]
+
+    def test_member_access_on_the_result(self):
+        from openscad_parser.ast import PrimaryMember, RenderExpression
+        e = self._expr("v = render() { cube(1); }.volume;")
+        assert type(e) is PrimaryMember and type(e.left) is RenderExpression
+
+    def test_render_is_still_a_name_and_a_call(self):
+        # Unlike the LALR parsers, ordered choice needs no reserved word:
+        # OpenSCAD itself accepts both of these.
+        from openscad_parser.ast import ModularCall, NumberLiteral, PrimaryCall
+        assert type(self._expr("render = 3;")) is NumberLiteral
+        assert type(self._expr("x = render(4);")) is PrimaryCall
+        from openscad_parser.ast import getASTfromString
+        assert type(getASTfromString("render() cube(1);")[0]) is ModularCall
+
+    @pytest.mark.parametrize("src", [
+        "obj = render() { cube(1); };",
+        "v = render() { translate([1, 0, 0]) cube(1); }.volume;",
+        "o = render() { union() { cube(1); sphere(2); } };",
+        "o = render() {};",
+    ])
+    def test_round_trips(self, src):
+        from openscad_parser.ast import getASTfromString, ast_from_json, ast_to_json
+        from openscad_parser.ast.pretty_print import to_openscad
+        ast = getASTfromString(src)
+        for text in (to_openscad(ast), str(ast[0]) + ";"):
+            again = getASTfromString(text)
+            assert again is not None, text
+            assert to_openscad(again) == to_openscad(ast)
+        assert to_openscad(ast_from_json(ast_to_json(ast))) == to_openscad(ast)
+
+    def test_scopes_its_children(self):
+        from openscad_parser.ast import getASTfromString, build_scopes
+        ast = getASTfromString("r = 2; o = render() { sphere(r); };")
+        build_scopes(ast)
+        sphere = ast[1].expr.children[0]
+        assert sphere.scope.lookup_variable("r") is ast[0]

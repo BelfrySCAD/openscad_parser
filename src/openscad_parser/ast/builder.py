@@ -984,6 +984,13 @@ class ASTBuilderVisitor(PTNodeVisitor):
     def visit_primary(self, node, children):
         return children[0]
     
+    def visit_render_expr(self, node, children):
+        # Grammar: (KWD_RENDER, TOK_PAREN, arguments, TOK_ENDPAREN, statement_block)
+        arguments = children.get_rule("arguments") or []
+        block = children.get_rule("statement_block") or []
+        return RenderExpression(arguments=list(arguments), children=list(block),
+                                position=self._get_node_position(node))
+
     def visit_range_expr(self, node, children):
         # OpenSCAD syntax: [start:end] or [start:step:end]
         start = children[0]
